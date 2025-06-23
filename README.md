@@ -1,2 +1,2 @@
-# meal_planner_codex
-Meal Planner app created by vibe coding using Codex
+# Meal Planner - Claude Code Vibes
+Meal Planner app created by vibe coding using Claude Code
