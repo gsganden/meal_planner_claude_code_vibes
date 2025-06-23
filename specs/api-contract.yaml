@@ -1,0 +1,254 @@
+openapi: 3.1.0
+info:
+  title: Personal Recipe Book API
+  version: 0.1.0
+  description: >-
+    REST & WebSocket endpoints for creating, editing, and managing personal
+    recipes. All endpoints are **user-scoped** - authenticated users can only
+    access and modify their own recipes. Authentication required via JWT Bearer token.
+servers:
+  - url: https://api.myrecipes.app
+security:
+  - bearerAuth: []
+paths:
+  /v1/auth/login:
+    post:
+      summary: Exchange OAuth code or email magic‑link token for JWT pair.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grant_type, token]
+              properties:
+                grant_type:
+                  type: string
+                  enum: [email_magic, oauth]
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Login successful.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, refresh_token]
+                properties:
+                  access_token:
+                    type: string
+                  refresh_token:
+                    type: string
+        "400": { $ref: '#/components/responses/BadRequest' }
+
+  /v1/auth/refresh:
+    post:
+      summary: Refresh access token using refresh token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Token refreshed successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, refresh_token]
+                properties:
+                  access_token:
+                    type: string
+                  refresh_token:
+                    type: string
+        "401": { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/auth/logout:
+    post:
+      summary: Invalidate refresh token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Logout successful.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Logged out successfully"
+        "400": { $ref: '#/components/responses/BadRequest' }
+
+  /v1/recipes:
+    post:
+      summary: Create a recipe for the authenticated user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Recipe'
+      responses:
+        "201":
+          description: Recipe created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipe'
+        "422": { $ref: '#/components/responses/ValidationError' }
+    get:
+      summary: List all recipes for the authenticated user.
+      responses:
+        "200":
+          description: Array of user's recipes in reverse chronological order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecipeSummary'
+
+  /v1/recipes/{recipeId}:
+    parameters:
+      - $ref: '#/components/parameters/recipeId'
+    get:
+      summary: Fetch a recipe owned by the authenticated user.
+      responses:
+        "200":
+          description: Recipe object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipe'
+        "404": { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: Update a recipe owned by the authenticated user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecipePatch'
+      responses:
+        "200":
+          description: Updated recipe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipe'
+        "422": { $ref: '#/components/responses/ValidationError' }
+    delete:
+      summary: Delete a recipe owned by the authenticated user.
+      responses:
+        "204":
+          description: Recipe deleted successfully.
+        "404": { $ref: '#/components/responses/NotFound' }
+
+
+  # WebSocket definition (non‑standard OpenAPI) for chat
+  x-websocket:
+    /v1/chat/{recipeId}:
+      description: Bidirectional chat stream for recipe editing.
+      bindings:
+        recipeId:
+          $ref: '#/components/parameters/recipeId'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    recipeId:
+      name: recipeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request payload.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Payload failed schema validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication required or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Recipe:
+      $ref: 'recipe-schema.json'
+    RecipeSummary:
+      type: object
+      required: [id, title, yield, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        yield:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    RecipePatch:
+      description: >-
+        Partial update payload; any Recipe field can be provided. The backend
+        performs validation and merges with latest version, returning new
+        version of the Recipe.
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Recipe'
+      example:
+        title: "Classic Pancakes (Gluten‑Free)"
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context
