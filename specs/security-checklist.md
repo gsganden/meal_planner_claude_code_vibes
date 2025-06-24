@@ -8,16 +8,16 @@
 
 | #   | Checklist Item                                                                                                           | Owner  | Phase  |
 | --- | ------------------------------------------------------------------------------------------------------------------------ | ------ | ------ |
-| 1.1 | OAuth & magic‑link flows require **PKCE** (if public client) or signed JWT redirect URIs.                                | Dev    | Dev    |
+| 1.1 | Email/password authentication uses secure password hashing (**bcrypt ≥12 rounds**) and input validation.                | Dev    | Dev    |
 | 1.2 | JWT access tokens ≤15 min; refresh ≤7 days; **rotate refresh ID** on use.                                                | Dev    | Dev    |
-| 1.3 | Token secrets (JWT signing key) stored only in Modal secret **`recipe_secrets`**; never in code or env committed to VCS. | DevOps | Deploy |
+| 1.3 | Token secrets (JWT signing key) stored only in Modal secret **`recipe-chat-secrets`**; never in code or env committed to VCS. | DevOps | Deploy |
 
 ## 2. Authorization
 
 | #   | Checklist Item                                                                                      | Owner | Phase |
 | --- | --------------------------------------------------------------------------------------------------- | ----- | ----- |
 | 2.1 | All DB queries filter by `user_id`; no cross‑tenant access. Unit test coverage for "leakage" cases. | Dev   | Dev   |
-| 2.2 | Import status polling (`/v1/import/{id}`) checks job's `user_id` matches auth identity.             | Dev   | Dev   |
+| 2.2 | Recipe access (`/v1/recipes/{id}`) checks recipe's `owner_id` matches authenticated user.           | Dev   | Dev   |
 
 ## 3. Data Protection & Privacy
 
@@ -40,7 +40,7 @@
 | --- | ------------------------------------------------------------------------------ | ----- | ----- |
 | 5.1 | All API payloads validated by Pydantic models or `pydantic‑core` before use.   | Dev   | Dev   |
 | 5.2 | LLM JSON output validated against `recipe_schema.json`; reject parsing errors. | Dev   | Dev   |
-| 5.3 | File uploads (PDF, image) scan mime type magic bytes & size ≤25 MB.            | Dev   | Dev   |
+| 5.3 | Recipe text input sanitized and validated; LLM responses validated before storage. | Dev   | Dev   |
 
 ## 6. Dependency & Supply‑Chain Security
 

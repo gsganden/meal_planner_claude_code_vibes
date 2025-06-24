@@ -221,7 +221,7 @@ GOOGLE_OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/
 ### 8.3  Model Configuration
 
 **Primary Model:** `gemini-2.5-flash` (Google's fast, efficient model)  
-**Fallback Model:** `gemini-1.5-pro` (stable production)
+**Single Model for MVP:** `gemini-2.5-flash` (no fallback needed for MVP)
 
 **LLM Registry Configuration:**
 ```yaml
@@ -231,28 +231,24 @@ models:
     settings:
       temperature: 0.1
       max_tokens: 2048
-  fast:
-    model: "gemini-2.5-flash"
-    settings:
-      temperature: 0.2
-      max_tokens: 1024
 ```
 
-### 8.4  Implementation Pattern
+### 8.4  Response Requirements
 
-```python
-import openai
+**Structured Data Requirement:**
+All LLM responses must return valid JSON conforming to `recipe-schema.json`
 
-client = openai.OpenAI(
-    api_key=os.environ["GOOGLE_API_KEY"],        # Google API key, not OpenAI
-    base_url=os.environ["GOOGLE_OPENAI_BASE_URL"] # Google's OpenAI-compatible endpoint
-)
+**Minimum Recipe Completeness:**
+- Title (required)
+- Yield/servings (required) 
+- At least 1 ingredient with text, quantity, and unit
+- At least 1 step with order and text
 
-response = client.chat.completions.create(
-    model="gemini-2.5-flash",
-    messages=[{"role": "user", "content": "Extract recipe from: ..."}]
-)
-```
+**Error Handling Requirement:**
+- Invalid JSON responses must be handled gracefully
+- Incomplete recipes must prompt user for more information
+- Failed requests must show user-friendly error messages
+- System should retry failed requests with improved prompts
 
 ### 8.5  Prompt Library Integration
 
@@ -280,6 +276,26 @@ template: |
 * **Synchronous Invocation** – `modal.Function.remote()` for chat messages; real-time responses.
 * **Concurrency Limits** – set per function (`concurrency_limit=10`); CPU tier for most models.
 * **Retries** – Modal built‑in retries; graceful fallback for LLM failures in chat.
+
+### 8.7  Email Service Requirements
+
+**Password Reset Functionality:**
+- System must send password reset emails to users
+- Emails must contain secure, time-limited reset tokens
+- Reset links must redirect to password reset form
+- Email templates must be user-friendly and branded
+
+**Email Service Integration Requirements:**
+- SMTP service or email API integration
+- Environment variables for email configuration
+- Email address validation and deliverability
+- Rate limiting for email sending to prevent abuse
+
+**Security Requirements:**
+- Reset tokens must expire within 1 hour
+- Tokens must be single-use only
+- Email sending must be rate-limited per user
+- Failed delivery must be handled gracefully
 
 ## 9  Deployment & DevOps on Modal
 

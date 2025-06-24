@@ -44,178 +44,115 @@ All messages are JSON with this envelope:
   "id": "msg_123",
   "timestamp": "2025-06-23T10:00:00Z",
   "payload": {
-    "content": "Make this recipe vegan",
-    "context": {
-      // Optional: additional context for the request
-    }
+    "content": "Make this recipe vegan"
   }
 }
 ```
 
-### 3.2 Field Update
-```json
-{
-  "type": "field_update",
-  "id": "msg_124",
-  "timestamp": "2025-06-23T10:01:00Z",
-  "payload": {
-    "field_path": "ingredients[2].quantity",
-    "value": "2",
-    "previous_value": "3"
-  }
-}
-```
-
-### 3.3 Action Request
-```json
-{
-  "type": "action_request",
-  "id": "msg_125",
-  "timestamp": "2025-06-23T10:02:00Z",
-  "payload": {
-    "action": "scale_recipe",  // scale_recipe, convert_units, substitute_ingredient
-    "parameters": {
-      "servings": 4
-    }
-  }
-}
-```
-
-### 3.4 Heartbeat
-```json
-{
-  "type": "heartbeat",
-  "id": "msg_126",
-  "timestamp": "2025-06-23T10:03:00Z",
-  "payload": {}
-}
-```
+**Usage**: All user chat input, including:
+- Recipe extraction requests ("Extract recipe from: [pasted text]")
+- Recipe generation requests ("Create a pasta recipe for 4 people")
+- Recipe modification requests ("Make this recipe vegan", "Add more protein")
+- General questions and refinements
 
 ## 4. Server → Client Messages
 
-### 4.1 Chat Response
-```json
-{
-  "type": "chat_response",
-  "id": "msg_200",
-  "timestamp": "2025-06-23T10:00:05Z",
-  "payload": {
-    "request_id": "msg_123",  // Links to original request
-    "content": "I'll help you make this recipe vegan. Here are the substitutions:",
-    "suggestions": [
-      {
-        "field_path": "ingredients[1]",
-        "original": {"text": "2 cups milk", "quantity": 2, "unit": "cup"},
-        "suggested": {"text": "2 cups oat milk", "quantity": 2, "unit": "cup"}
-      }
-    ]
-  }
-}
-```
-
-### 4.2 Recipe Update
+### 4.1 Recipe Update
 ```json
 {
   "type": "recipe_update",
-  "id": "msg_201",
+  "id": "msg_200",
   "timestamp": "2025-06-23T10:00:10Z",
   "payload": {
-    "changes": [
-      {
-        "field_path": "ingredients[1].text",
-        "value": "2 cups oat milk"
-      }
-    ],
-    "recipe_data": {} // Full recipe JSON
+    "request_id": "msg_123",  // Links to original chat_message
+    "content": "I'll help you make this recipe vegan. Here are the changes:",
+    "recipe_data": {
+      // Full updated recipe JSON matching recipe-schema.json
+      "title": "Vegan Pasta Recipe",
+      "yield": "4 servings",
+      "ingredients": [
+        {"text": "2 cups oat milk", "quantity": 2, "unit": "cup"}
+      ],
+      "steps": [
+        {"order": 1, "text": "Heat the oat milk in a pan"}
+      ]
+    }
   }
 }
 ```
 
-### 4.3 Processing Status
-```json
-{
-  "type": "processing_status",
-  "id": "msg_202",
-  "timestamp": "2025-06-23T10:00:02Z",
-  "payload": {
-    "request_id": "msg_123",
-    "status": "processing",  // processing, completed, failed
-    "message": "Analyzing recipe for vegan substitutions..."
-  }
-}
-```
-
-### 4.4 Error
-```json
-{
-  "type": "error",
-  "id": "msg_203",
-  "timestamp": "2025-06-23T10:00:15Z",
-  "payload": {
-    "request_id": "msg_123",
-    "code": "llm_error",
-    "message": "Unable to process request. Please try again."
-  }
-}
-```
-
-### 4.5 System Message
-```json
-{
-  "type": "system_message",
-  "id": "msg_204",
-  "timestamp": "2025-06-23T10:00:20Z",
-  "payload": {
-    "level": "info",  // info, warning, error
-    "message": "Another user is editing this recipe"
-  }
-}
-```
+**Usage**: All server responses including:
+- Recipe extraction results with structured recipe data
+- Recipe generation results with new recipe data  
+- Recipe modification results with updated recipe data
+- Assistant chat responses with or without recipe changes
+- Error messages when processing fails
 
 ## 5. Message Flow Examples
 
-### 5.1 Chat-Driven Edit
+### 5.1 Recipe Extraction
 ```
-Client: chat_message ("make vegan")
-Server: processing_status ("analyzing...")
-Server: chat_response (with suggestions)
-Client: action_request ("apply_suggestions")
-Server: recipe_update (updated recipe)
+Client: chat_message ("Extract recipe from: [pasted recipe text]")
+Server: recipe_update (extracted structured recipe with content explaining extraction)
 ```
 
-### 5.2 Direct Field Edit
+### 5.2 Recipe Modification  
 ```
-Client: field_update (ingredients[0].quantity = "3")
-Server: recipe_update (confirmed change)
-Server: system_message ("field updated")
+Client: chat_message ("Make this recipe vegan")
+Server: recipe_update (modified recipe with vegan substitutions + explanation)
+```
+
+### 5.3 Recipe Generation
+```
+Client: chat_message ("Create a pasta recipe for 4 people")
+Server: recipe_update (new generated recipe + explanation)
+```
+
+### 5.4 Error Handling
+```
+Client: chat_message ("make this gluten-free")
+Server: recipe_update (error content explaining LLM processing failed)
+```
+
+### 5.5 Incomplete Recipe Handling
+```
+Client: chat_message ("Extract recipe from: Chocolate cake with flour and eggs")
+Server: recipe_update (content requesting more info, recipe_data: null)
 ```
 
 ## 6. Error Handling
 
 ### 6.1 Connection Errors
-- Auto-reconnect with exponential backoff: 1s, 2s, 4s, 8s, max 30s
-- Preserve message queue during reconnection
-- Resume with current recipe state
+- Basic reconnection on disconnect (browser WebSocket default behavior)
+- Display "Connection lost" message to user with retry button
+- Resume with current recipe state after reconnection
 
-### 6.2 Message Errors
-| Error Code | Description | Client Action |
-|------------|-------------|---------------|
-| `invalid_message` | Malformed JSON or missing fields | Fix and retry |
-| `unauthorized` | Token expired or invalid recipe | Refresh auth |
-| `rate_limit` | Too many messages | Backoff 1 minute |
-| `llm_error` | AI processing failed | Retry or fallback |
+### 6.2 Message Processing Errors
+All errors are communicated via `recipe_update` messages with error content:
+
+```json
+{
+  "type": "recipe_update",
+  "payload": {
+    "request_id": "msg_123",
+    "content": "Sorry, I couldn't process that request. Please try again.",
+    "recipe_data": null  // No recipe changes when error occurs
+  }
+}
+```
+
+**Error Scenarios:**
+- Invalid JSON from LLM → "Unable to understand the recipe format"
+- LLM timeout → "Request took too long, please try again"  
+- Rate limiting → "Too many requests, please wait a moment"
+- Authentication errors → Close connection, redirect to login
+- Incomplete recipe data → "I need more information. Could you provide the cooking steps?"
 
 ## 7. Rate Limits
 
 - Max 30 messages/minute per connection
-- Max 5 concurrent connections per user
+- Max 5 concurrent connections per user  
 - Max message size: 64KB
-
-## 8. Keep-Alive
-
-- Client sends heartbeat every 30s
-- Server responds with heartbeat_ack
-- Connection closed if no heartbeat for 90s
 
 ---
 
