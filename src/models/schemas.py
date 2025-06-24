@@ -131,10 +131,6 @@ class ResetPasswordRequest(BaseModel):
 
 # WebSocket Schemas
 class ChatMessage(BaseModel):
-    model_config = ConfigDict(
-        json_encoders={datetime: lambda v: v.isoformat()}
-    )
-    
     type: str = Field(default="chat_message", pattern="^chat_message$")
     id: str = Field(default_factory=lambda: f"msg_{uuid.uuid4().hex[:8]}")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
@@ -142,10 +138,6 @@ class ChatMessage(BaseModel):
 
 
 class RecipeUpdate(BaseModel):
-    model_config = ConfigDict(
-        json_encoders={datetime: lambda v: v.isoformat()}
-    )
-    
     type: str = Field(default="recipe_update", pattern="^recipe_update$")
     id: str = Field(default_factory=lambda: f"msg_{uuid.uuid4().hex[:8]}")
     timestamp: datetime = Field(default_factory=datetime.utcnow)

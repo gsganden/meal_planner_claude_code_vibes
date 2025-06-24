@@ -44,6 +44,7 @@ async def generate_completion(
             "max_tokens": max_tokens,
         }
         
+        logger.info(f"Calling LLM with model={model}, temperature={temperature}")
         response = await client.chat.completions.create(**kwargs)
         
         if not response.choices:
@@ -53,10 +54,12 @@ async def generate_completion(
         if not content:
             raise ValueError("Empty response from LLM")
         
+        logger.info(f"LLM response received, length={len(content)}")
         return content
         
     except Exception as e:
         logger.error(f"LLM generation failed: {str(e)}")
+        logger.error(f"Exception type: {type(e).__name__}")
         raise
 
 

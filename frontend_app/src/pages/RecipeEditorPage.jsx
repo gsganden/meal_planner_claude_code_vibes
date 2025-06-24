@@ -37,16 +37,17 @@ export default function RecipeEditorPage() {
 
   // WebSocket connection
   useEffect(() => {
-    if (recipe && !wsRef.current) {
+    if (recipe && id && !wsRef.current) {
       connectWebSocket()
     }
     
     return () => {
       if (wsRef.current) {
         wsRef.current.close()
+        wsRef.current = null
       }
     }
-  }, [recipe])
+  }, [id, recipe?.id]) // Connect when we have a recipe ID
 
   // Warn about unsaved changes
   useEffect(() => {
@@ -91,9 +92,11 @@ export default function RecipeEditorPage() {
       }
       
       wsRef.current.onmessage = (event) => {
+        console.log('WebSocket message received:', event.data)
         const data = JSON.parse(event.data)
         if (data.type === 'recipe_update') {
-          const { message, recipe, error } = data.payload
+          const { content, recipe_data, error } = data.payload
+          console.log('Recipe update payload:', { content, recipe_data, error })
           
           // Handle errors
           if (error) {
@@ -106,17 +109,17 @@ export default function RecipeEditorPage() {
           }
           
           // Add assistant message to chat if provided
-          if (message) {
+          if (content) {
             setChatMessages(prev => [...prev, {
               type: 'assistant',
-              content: message,
+              content: content,
               timestamp: new Date().toISOString()
             }])
           }
           
           // Update recipe if data provided
-          if (recipe) {
-            setRecipe(recipe)
+          if (recipe_data) {
+            setRecipe(recipe_data)
             setHasUnsavedChanges(false)
             setLastSaveTime(new Date())
           }
@@ -128,17 +131,19 @@ export default function RecipeEditorPage() {
         setWsStatus('error')
       }
       
-      wsRef.current.onclose = () => {
-        console.log('WebSocket disconnected')
+      wsRef.current.onclose = (event) => {
+        console.log('WebSocket disconnected', event.code, event.reason)
         setWsStatus('disconnected')
         wsRef.current = null
         
-        // Attempt to reconnect after a delay
-        setTimeout(() => {
-          if (recipe) {
-            connectWebSocket()
-          }
-        }, 3000)
+        // Only attempt to reconnect if it wasn't a normal closure
+        if (event.code !== 1000 && recipe) {
+          setTimeout(() => {
+            if (!wsRef.current) {
+              connectWebSocket()
+            }
+          }, 3000)
+        }
       }
     } catch (error) {
       console.error('Failed to connect WebSocket:', error)

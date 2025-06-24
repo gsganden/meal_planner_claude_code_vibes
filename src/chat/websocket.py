@@ -106,7 +106,9 @@ async def process_chat_message(
         
         # Generate new recipe
         elif any(keyword in message_lower for keyword in ["create", "make", "generate", "recipe for"]):
+            logger.info(f"Generating recipe from prompt: {message[:100]}...")
             recipe_data = await generate_recipe_from_prompt(message)
+            logger.info(f"Recipe generated: {recipe_data.get('title', 'Unknown')}")
             
             # Update recipe in database
             recipe_data["id"] = recipe.id
@@ -233,10 +235,14 @@ async def handle_chat(
                 if not user_message:
                     continue
                 
+                logger.info(f"Received message from {client_id}: {user_message[:100]}...")
+                
                 # Process message
                 response_content, recipe_data = await process_chat_message(
                     user_message, recipe, db
                 )
+                
+                logger.info(f"Response generated for {client_id}: {response_content[:100]}...")
                 
                 # Send response
                 response = RecipeUpdate(
