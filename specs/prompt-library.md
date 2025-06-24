@@ -22,13 +22,13 @@ repo_root/
 models:
   default:            # logical name used by prompts
     provider: openai
-    model: gemini-2.5-pro  # Gemini 2.5 Pro via OpenAI interface
+    model: gemini-2.5-flash  # Gemini 2.5 Flash via OpenAI interface
     settings:
       temperature: 0.2
       top_p: 1
   fast:
     provider: openai
-    model: gemini-2.5-pro  # Same model for consistency
+    model: gemini-2.5-flash  # Same model for consistency
     settings:
       temperature: 0.4
   fallback:

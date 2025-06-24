@@ -46,7 +46,7 @@ All messages are JSON with this envelope:
   "payload": {
     "content": "Make this recipe vegan",
     "context": {
-      "current_version": 3  // Optional: specify version
+      // Optional: additional context for the request
     }
   }
 }
@@ -120,7 +120,6 @@ All messages are JSON with this envelope:
   "id": "msg_201",
   "timestamp": "2025-06-23T10:00:10Z",
   "payload": {
-    "version": 4,
     "changes": [
       {
         "field_path": "ingredients[1].text",
@@ -181,7 +180,7 @@ Client: chat_message ("make vegan")
 Server: processing_status ("analyzing...")
 Server: chat_response (with suggestions)
 Client: action_request ("apply_suggestions")
-Server: recipe_update (new version)
+Server: recipe_update (updated recipe)
 ```
 
 ### 5.2 Direct Field Edit
@@ -196,7 +195,7 @@ Server: system_message ("field updated")
 ### 6.1 Connection Errors
 - Auto-reconnect with exponential backoff: 1s, 2s, 4s, 8s, max 30s
 - Preserve message queue during reconnection
-- Resume with last known recipe version
+- Resume with current recipe state
 
 ### 6.2 Message Errors
 | Error Code | Description | Client Action |

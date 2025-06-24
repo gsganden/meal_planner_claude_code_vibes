@@ -10,7 +10,7 @@ This document outlines a comprehensive testing strategy to validate the Recipe C
 - **Deployment Validation**: Ensure the application deploys successfully to Modal
 - **Database Connectivity**: Verify SQLite on Modal Volume works correctly
 - **API Functionality**: Test all REST endpoints with realistic data
-- **Authentication Flow**: Validate JWT and Auth0 integration
+- **Authentication Flow**: Validate JWT email/password authentication
 - **LLM Integration**: Test Google Gemini API connectivity and responses
 - **WebSocket Chat**: Verify real-time recipe editing functionality
 - **Error Handling**: Test graceful degradation and error responses
@@ -32,9 +32,9 @@ This document outlines a comprehensive testing strategy to validate the Recipe C
 - ✅ WebSocket message handling
 
 #### **Integration Tests** (New)
-- Database connectivity (SQLite + PostgreSQL)
+- Database connectivity (SQLite on Modal Volume)
 - LLM API integration (with real/mock Gemini)
-- Auth0 authentication flow
+- Email/password authentication flow
 - WebSocket full-duplex communication
 
 #### **End-to-End Tests** (New)
@@ -139,8 +139,8 @@ def test_database_persistence():
 def test_jwt_token_generation():
     """Test JWT tokens are generated correctly"""
     
-def test_auth0_integration():
-    """Test Auth0 authentication (with mock)"""
+def test_email_password_authentication():
+    """Test email/password authentication flow"""
     
 def test_protected_endpoint_access():
     """Test authenticated vs unauthenticated access"""
@@ -219,8 +219,8 @@ def test_session_management():
 class MockGeminiAPI:
     """Mock Google Gemini API for testing"""
     
-class MockAuth0:
-    """Mock Auth0 service for authentication testing"""
+class MockEmailAuth:
+    """Mock email/password authentication for testing"""
     
 class MockModal:
     """Mock Modal environment for local testing"""

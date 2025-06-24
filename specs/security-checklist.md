@@ -23,7 +23,7 @@
 
 | #   | Checklist Item                                                                   | Owner   | Phase       |
 | --- | -------------------------------------------------------------------------------- | ------- | ----------- |
-| 3.1 | **AES‑256‑GCM** at‑rest encryption enabled for Postgres (Neon/Supabase default). | DevOps  | Deploy      |
+| 3.1 | **Volume encryption** enabled for SQLite on Modal Volume (Modal default). | DevOps  | Deploy      |
 | 3.2 | All backups encrypted with server‑side encryption and stored in private bucket.  | DevOps  | Post‑Deploy |
 | 3.3 | PII limited to email; no ingredient or recipe data considered sensitive.         | Product | Review      |
 

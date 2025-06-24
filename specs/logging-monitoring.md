@@ -1,8 +1,25 @@
 # Logging & Monitoring Spec (v0.1)
 
-> **Goal:** Provide uniform observability across API, import worker, and LLM router functions while running on Modal and Postgres. This spec defines log structure, metrics, dashboards, and alert thresholds required for the MVP.
+> **Goal:** Provide uniform observability across API, import worker, and LLM router functions while running on Modal with SQLite for application data and Modal's logging system for operational logs. This spec defines log structure, metrics, dashboards, and alert thresholds required for the MVP.
 
 ---
+
+## Data Storage Architecture
+
+**Application Data Storage:**
+- **SQLite on Modal Volume**: User accounts, recipes, chat messages, application state
+- **Purpose**: Persistent application data that requires ACID transactions and structured queries
+
+**Operational Data Storage:**
+- **Modal Logging System**: Request logs, error logs, performance metrics, debug information
+- **Purpose**: Operational observability, debugging, monitoring, alerting
+- **Retention**: Managed automatically by Modal platform
+
+**Separation Benefits:**
+- Application performance not impacted by log volume
+- Independent retention and access policies
+- Modal handles log rotation, aggregation, and dashboard integration
+- SQLite optimized purely for application data queries
 
 ## 1. Logging
 

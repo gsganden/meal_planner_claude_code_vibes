@@ -25,7 +25,7 @@
 
 * **Latency** – p95 <200 ms read, <400 ms write.
 * **Offline** – IndexedDB cache for viewing & editing without network.
-* **Security** – data encrypted at rest (AES‑256 Postgres) and in transit (HTTPS).
+* **Security** – data encrypted at rest (SQLite on Modal Volume) and in transit (HTTPS).
 * **Accessibility** – WCAG 2.1 AA.
 
 ## 4  High‑Level Architecture
@@ -191,7 +191,7 @@ interface AuthState {
 
 ### 8.1  Gemini API via OpenAI-Compatible Interface
 
-**Service Provider:** Google Gemini 2.5 Pro via Google's official OpenAI-compatible API  
+**Service Provider:** Google Gemini 2.5 Flash via Google's official OpenAI-compatible API  
 **Documentation:** https://ai.google.dev/gemini-api/docs/openai  
 **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/openai/`
 
@@ -220,19 +220,19 @@ GOOGLE_OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/
 
 ### 8.3  Model Configuration
 
-**Primary Model:** `gemini-2.5-pro` (Google's most capable model)  
+**Primary Model:** `gemini-2.5-flash` (Google's fast, efficient model)  
 **Fallback Model:** `gemini-1.5-pro` (stable production)
 
 **LLM Registry Configuration:**
 ```yaml
 models:
   default:
-    model: "gemini-2.5-pro"
+    model: "gemini-2.5-flash"
     settings:
       temperature: 0.1
       max_tokens: 2048
   fast:
-    model: "gemini-2.5-pro"
+    model: "gemini-2.5-flash"
     settings:
       temperature: 0.2
       max_tokens: 1024
@@ -249,7 +249,7 @@ client = openai.OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="gemini-2.5-pro",
+    model="gemini-2.5-flash",
     messages=[{"role": "user", "content": "Extract recipe from: ..."}]
 )
 ```
@@ -320,34 +320,32 @@ CORS_ORIGINS="https://recipe-chat-assistant.vercel.app,http://localhost:3000"
 | **Verify**        | Test `/health` endpoint at `https://recipe-chat-assistant--fastapi-app.modal.run/health`                   |
 | **Monitor**       | Modal dashboard for logs, metrics, and scaling                                                              |
 
-### 9.4  Implementation Requirements from Specification
+### 9.4  System Configuration Requirements
 
-**Configuration Changes Required:**
-1. **Environment Variables:** Update `src/models/config.py` to use `GOOGLE_API_KEY` and `GOOGLE_OPENAI_BASE_URL`
-2. **LLM Client:** Update `src/llm/client.py` to use Google credentials instead of OpenAI credentials  
-3. **Model Registry:** Update `llm_registry.yaml` to use `gemini-2.5-pro` as default model
-4. **Modal Volume:** Update `modal_app.py` to create and mount Modal Volume for SQLite persistence
-5. **Database Path:** Configure DATABASE_URL to use volume mount path (`/data/production.db`)
-6. **Deployment:** Update deployment scripts to handle volume creation and SQLite initialization
+**Environment Configuration:**
+The application requires these environment variables for proper operation:
+- **`GOOGLE_API_KEY`**: Google API key for Gemini model access
+- **`GOOGLE_OPENAI_BASE_URL`**: Google's OpenAI-compatible endpoint URL
+- **`JWT_SECRET_KEY`**: Secure random string for JWT token signing
+- **`DATABASE_URL`**: SQLite database path on Modal volume (`/data/production.db`)
 
-**Modal Resources Creation:**
-```bash
-# Create volume for persistent SQLite storage
-modal volume create recipe-data-volume
+**LLM Integration:**
+- Application uses Google Gemini 2.5 Flash via OpenAI-compatible interface
+- Model client authenticates with Google API key (not OpenAI key)
+- Default model configured as `gemini-2.5-flash` in model registry
 
-# Create secret with credentials (DATABASE_URL set automatically)
-modal secret create recipe-chat-secrets \
-  JWT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" \
-  GOOGLE_API_KEY="your-google-api-key" \
-  GOOGLE_OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
-```
+**Storage Requirements:**
+- Modal Volume mounted at `/data` for SQLite database persistence
+- Database file located at `/data/production.db` on the mounted volume
+- Volume provides durability and backup for all recipe and user data
 
-**Validation Steps:**
-1. Verify `health` endpoint responds with 200 OK
-2. Test authentication with `/v1/auth/login`
-3. Test recipe creation with `/v1/recipes`
-4. Test WebSocket chat at `/v1/chat/{recipe_id}`
-5. Verify LLM integration with recipe extraction/generation
+**Deployment Validation:**
+The deployed system should satisfy these functional requirements:
+1. Health endpoint returns 200 OK status
+2. User authentication flow works end-to-end
+3. Recipe CRUD operations function correctly
+4. WebSocket chat connections establish successfully
+5. LLM integration processes recipe requests properly
 
 ## 10  Database Strategy: SQLite on Modal Volumes
 

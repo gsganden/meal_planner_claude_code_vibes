@@ -9,19 +9,21 @@
 
 ### Key Implementation Decisions
 
-1. **LLM Integration**: Using Google Gemini 2.5 Pro via OpenAI-compatible API
+1. **LLM Integration**: Using Google Gemini 2.5 Flash via OpenAI-compatible API
    - Endpoint: `https://generativelanguage.googleapis.com/v1beta/openai/`
    - Uses Google API key, not OpenAI key
    - OpenAI Python library for compatibility
 
 2. **Database**: JSONB storage for recipes
-   - PostgreSQL in production (Modal)
+   - SQLite on Modal Volume for production
    - SQLite for local development
-   - UUID and JSON types compatible with both
+   - UUID and JSON types, recipe_data as JSONB
 
-3. **Authentication**: JWT with Auth0
-   - Simplified magic link flow for MVP
-   - Individual user accounts
+3. **Authentication**: Traditional email/password with JWT tokens
+   - Email/password signup and signin
+   - JWT access/refresh token pairs
+   - bcrypt password hashing with salt rounds ≥12
+   - NO Auth0 for MVP
 
 4. **Real-time**: WebSocket chat protocol
    - Message types: chat_message, field_update, action_request, heartbeat
@@ -87,18 +89,18 @@ DATABASE_URL=sqlite+aiosqlite:///./local.db
 JWT_SECRET_KEY=your-dev-secret-key
 GOOGLE_API_KEY=your-google-api-key
 GOOGLE_OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-AUTH0_DOMAIN=your-dev-tenant.auth0.com
-AUTH0_CLIENT_ID=your-dev-client-id
-AUTH0_CLIENT_SECRET=your-dev-client-secret
 DEBUG=true
 ```
 
 ## API Endpoints
 
 - `GET /health` - Health check
-- `POST /v1/auth/login` - User authentication
+- `POST /v1/auth/signup` - Create new user account
+- `POST /v1/auth/signin` - User authentication
 - `POST /v1/auth/refresh` - Refresh JWT token
 - `POST /v1/auth/logout` - Logout user
+- `POST /v1/auth/forgot-password` - Send password reset email
+- `POST /v1/auth/reset-password` - Reset password with token
 - `GET /v1/recipes` - List user's recipes
 - `POST /v1/recipes` - Create new recipe
 - `GET /v1/recipes/{id}` - Get specific recipe
@@ -109,9 +111,9 @@ DEBUG=true
 ## Key Technologies
 
 - **Backend**: FastAPI + SQLAlchemy + Pydantic v2
-- **Database**: PostgreSQL (Modal) / SQLite (local)
-- **LLM**: Google Gemini 2.5 Pro via OpenAI-compatible API
-- **Auth**: JWT + Auth0
+- **Database**: SQLite on Modal Volume (production) / SQLite (local)
+- **LLM**: Google Gemini 2.5 Flash via OpenAI-compatible API
+- **Auth**: JWT + email/password
 - **Deployment**: Modal
 - **Real-time**: WebSockets
 

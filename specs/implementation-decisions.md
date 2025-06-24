@@ -32,8 +32,8 @@
 
 ## 3. Authentication Implementation
 
-**Decision**: Use Auth0 for OAuth + magic links, implement JWT handling in-app
-**Rationale**: Reduces auth complexity, proven OAuth flows, flexible JWT management
+**Decision**: Use traditional email/password authentication with JWT tokens (NO Auth0 for MVP)
+**Rationale**: Simplified MVP implementation, fewer external dependencies, faster development
 
 ## 4. Environment Configuration
 
@@ -52,14 +52,15 @@
 
 **Rationale**: Comprehensive coverage without external dependencies in tests
 
-## 6. Authentication Simplification (MVP)
+## 6. Authentication Implementation Details (MVP)
 
-**Decision**: Simplified auth flow for MVP
-- Magic link: token = email address
-- OAuth: token = "oauth:email@domain.com"
-- No actual Auth0 integration yet
+**Decision**: Email/password authentication with JWT tokens
+- Signup: POST /v1/auth/signup with email, password, confirmPassword
+- Signin: POST /v1/auth/signin with email, password  
+- JWT access tokens with refresh token rotation
+- Password requirements: minimum 8 characters with letter and number
 
-**Rationale**: Focus on core functionality, real Auth0 integration post-MVP
+**Rationale**: Simple, secure, and sufficient for MVP without external dependencies
 
 ## 7. LLM Error Handling
 
