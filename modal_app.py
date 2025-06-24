@@ -29,6 +29,8 @@ volume = Volume.from_name("recipe-data-volume", create_if_missing=True)
 )
 @asgi_app()
 def fastapi_app():
+    import sys
+    sys.path.append('/app')
     # Set database URL to use Modal volume
     os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////data/production.db"
     
@@ -45,6 +47,8 @@ def fastapi_app():
 async def init_deployment():
     """Initialize database tables on deployment"""
     import os
+    import sys
+    sys.path.append('/app')
     os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////data/production.db"
     
     from src.db.database import init_db

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuthStore } from '../stores/authStore'
+import { getRecipeWebSocketUrl } from '../config/api'
 import RecipeForm from '../components/RecipeForm'
 import ChatPanel from '../components/ChatPanel'
 
@@ -66,7 +67,7 @@ export default function RecipeEditorPage() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await axios.get(`/v1/recipes/${id}`)
+      const response = await axios.get(`/recipes/${id}`)
       setRecipe(response.data)
     } catch (error) {
       console.error('Error loading recipe:', error)
@@ -81,7 +82,7 @@ export default function RecipeEditorPage() {
 
   const connectWebSocket = () => {
     const token = localStorage.getItem('access_token')
-    const wsUrl = `ws://localhost:8000/v1/chat/${id}?token=${token}`
+    const wsUrl = getRecipeWebSocketUrl(id, token)
     
     try {
       wsRef.current = new WebSocket(wsUrl)
@@ -193,7 +194,7 @@ export default function RecipeEditorPage() {
   const saveRecipe = async (recipeData = recipe) => {
     try {
       setIsSaving(true)
-      await axios.patch(`/v1/recipes/${id}`, recipeData)
+      await axios.patch(`/recipes/${id}`, recipeData)
       setHasUnsavedChanges(false)
       setLastSaveTime(new Date())
     } catch (error) {
@@ -225,7 +226,7 @@ export default function RecipeEditorPage() {
 
   const confirmDelete = async () => {
     try {
-      await axios.delete(`/v1/recipes/${id}`)
+      await axios.delete(`/recipes/${id}`)
       navigate('/')
     } catch (error) {
       console.error('Error deleting recipe:', error)

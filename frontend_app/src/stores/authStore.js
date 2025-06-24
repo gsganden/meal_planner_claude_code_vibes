@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import axios from 'axios'
+import { API_URL } from '../config/api'
 
 // Configure axios defaults
-// Don't set baseURL since Vite proxy handles /v1 routes
+axios.defaults.baseURL = API_URL
 axios.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
   if (token) {
@@ -21,7 +22,7 @@ axios.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refresh_token')
         if (refreshToken) {
-          const response = await axios.post('/v1/auth/refresh', {
+          const response = await axios.post('/auth/refresh', {
             refresh_token: refreshToken,
           })
           const { access_token, refresh_token: newRefreshToken } = response.data
@@ -61,7 +62,7 @@ export const useAuthStore = create((set) => ({
   signup: async (email, password, confirmPassword) => {
     try {
       set({ error: null })
-      const response = await axios.post('/v1/auth/signup', {
+      const response = await axios.post('/auth/signup', {
         email,
         password,
         confirmPassword,
@@ -82,7 +83,7 @@ export const useAuthStore = create((set) => ({
   signin: async (email, password) => {
     try {
       set({ error: null })
-      const response = await axios.post('/v1/auth/signin', {
+      const response = await axios.post('/auth/signin', {
         email,
         password,
       })
@@ -103,7 +104,7 @@ export const useAuthStore = create((set) => ({
     try {
       const refreshToken = localStorage.getItem('refresh_token')
       if (refreshToken) {
-        await axios.post('/v1/auth/logout', { refresh_token: refreshToken })
+        await axios.post('/auth/logout', { refresh_token: refreshToken })
       }
     } catch (error) {
       // Ignore logout errors

@@ -26,7 +26,7 @@ export default function RecipeListPage() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await axios.get('/v1/recipes')
+      const response = await axios.get('/recipes')
       setRecipes(response.data)
     } catch (error) {
       setError('Failed to load recipes')
@@ -53,7 +53,7 @@ export default function RecipeListPage() {
         }]
       }
       console.log('Creating recipe with data:', recipeData)
-      const response = await axios.post('/v1/recipes', recipeData)
+      const response = await axios.post('/recipes', recipeData)
       
       // Navigate to the recipe editor
       navigate(`/recipe/${response.data.id}`)

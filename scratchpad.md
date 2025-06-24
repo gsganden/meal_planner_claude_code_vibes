@@ -927,3 +927,135 @@ steps: [{ text: '' }]
 2. **Use curl for API testing**: Isolate frontend vs backend issues
 3. **Examine validation schemas**: Understand exact requirements
 4. **Test with minimal examples**: Create simple test scripts
+
+## WebSocket Chat Implementation Fixed
+
+### Problems Identified:
+1. **WebSocket Message Format Mismatch**:
+   - Backend sent: `{ type: 'recipe_update', payload: { content, recipe_data } }`
+   - Frontend expected: `{ type: 'recipe_update', payload: { message, recipe } }`
+   - Result: Messages and recipe updates weren't being processed
+
+2. **WebSocket Reconnection Loop**:
+   - useEffect dependency was `[recipe]` - entire recipe object
+   - Every recipe update triggered effect → close/reopen connection → infinite loop
+   - Users saw repeated "Connected to recipe chat" messages
+
+3. **Multiple WebSocket Connections**:
+   - Logs showed many simultaneous WebSocket connections
+   - Each reconnect didn't properly clean up previous connection
+
+4. **Recipe Generation Working but UI Not Updating**:
+   - Backend successfully generated recipes (visible in logs)
+   - Database was updated (visible when navigating away and back)
+   - Real-time UI updates weren't happening due to message format issue
+
+### Solutions Applied:
+
+1. **Fixed Frontend Message Handling**:
+   ```javascript
+   // Before:
+   const { message, recipe, error } = data.payload
+   
+   // After:
+   const { content, recipe_data, error } = data.payload
+   ```
+
+2. **Fixed WebSocket Dependency**:
+   ```javascript
+   // Before:
+   }, [recipe]) // Caused infinite loop
+   
+   // After:
+   }, [id, recipe?.id]) // Only reconnect when recipe ID changes
+   ```
+
+3. **Improved Reconnection Logic**:
+   ```javascript
+   wsRef.current.onclose = (event) => {
+     // Only reconnect if not a normal closure (code 1000)
+     if (event.code !== 1000 && recipe) {
+       setTimeout(() => {
+         if (!wsRef.current) {
+           connectWebSocket()
+         }
+       }, 3000)
+     }
+   }
+   ```
+
+### Debugging Process:
+1. **Added Logging**: Added console.log statements to track WebSocket messages
+2. **Monitored Backend Logs**: Used `tail -f logs/backend.log` to see server activity
+3. **Identified LLM Success**: Saw "Recipe generated: Classic Peanut Butter and Jelly Sandwich"
+4. **Traced Message Flow**: Followed message from backend through WebSocket to frontend
+5. **Found Format Mismatch**: Discovered field name differences in payload
+
+### Key Lessons Learned:
+1. **Message Contracts Must Match**: Backend and frontend must agree on exact message format
+2. **useEffect Dependencies Matter**: Be careful with object dependencies - they can cause loops
+3. **WebSocket State Management**: Use refs for WebSocket to avoid React re-render issues
+4. **Add Logging Early**: Console.log and backend logging essential for debugging real-time features
+5. **Test Message Flow End-to-End**: Verify each step from user input → backend → LLM → database → WebSocket → UI
+
+### Testing Insights:
+- Keyword matching currently rigid (requires "create", "make", "generate", or "recipe for")
+- LLM integration working well with Gemini 2.5 Flash
+- Response time ~4 seconds for recipe generation
+- WebSocket stable once connection dependencies fixed
+
+### Development Tools Created:
+1. **restart_servers.sh**: Restarts both servers with logging to files
+2. **view_logs.sh**: Helper to tail log files
+3. **Logging improvements**: Added detailed logging for message flow debugging
+
+The application now works as designed with real-time chat updates and recipe modifications!
+
+## Modal Deployment - Missing Dependencies
+### Problem:
+- Backend deployment failed with `ImportError: email-validator is not installed`
+- Pydantic's EmailStr field requires the email-validator package
+
+### Solution:
+- Updated requirements.txt to use `pydantic[email]==2.10.4` instead of `pydantic==2.10.4`
+- This installs pydantic with the email validation extra dependency
+
+### Lesson Learned:
+- When using Pydantic's EmailStr field, always install with `pydantic[email]` to include email-validator
+- Modal deployments need all dependencies explicitly listed in requirements.txt
+
+## Frontend Deployment Configuration
+### Environment Variable Setup:
+- Separated backend and frontend environment configurations
+- Frontend uses VITE_ prefixed variables (Vite convention)
+- Created `frontend_app/.env` for local development
+- Created `frontend_app/.env.production` for production deployment
+- Created `src/config/api.js` to centralize API URL configuration
+
+### Key Changes:
+1. **Removed Vite Proxy**: No longer using proxy in vite.config.js
+2. **Dynamic API URLs**: Frontend now uses environment variables for API endpoints
+3. **WebSocket Configuration**: Automatically derives WebSocket URL from API URL
+4. **CORS Configuration**: Backend already supports multiple origins via CORS_ORIGINS env var
+
+### Deployment Options Documented:
+- Vercel (recommended for simplicity)
+- Netlify 
+- GitHub Pages (requires additional routing config)
+
+### Best Practices Applied:
+- Separate .env files for backend (root) and frontend (frontend_app/)
+- Environment-specific configurations (.env vs .env.production)
+- Centralized API configuration in frontend
+- CORS origins configurable via environment variables
+
+## Production Deployment Debugging
+### CORS Configuration Issue:
+**Problem**: Frontend deployed to Vercel couldn't communicate with Modal backend - "Signup failed"
+**Root Cause**: CORS_ORIGINS environment variable didn't include the Vercel deployment URL
+**Solution**: 
+1. Add Vercel URL to CORS_ORIGINS in .env
+2. Update Modal secrets: `modal secret delete recipe-chat-secrets && python create_modal_secrets.py`
+3. Redeploy backend: `modal deploy modal_app.py`
+
+**Lesson Learned**: Always add your production frontend URL to CORS_ORIGINS before deploying
