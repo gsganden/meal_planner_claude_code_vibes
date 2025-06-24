@@ -19,7 +19,6 @@
 | F3 | **Chat‑Driven Editing** – two‑pane interface: chat + live recipe preview. |
 | F4 | **Direct Field Editing** – user edits any field; syncs into chat context. |
 | F5 | **Simple Storage** – recipes stored chronologically, no versioning.       |
-| F6 | **JSON Backup** – export all recipes as JSON for backup.                  |
 
 ## 3  Non‑Functional Requirements
 

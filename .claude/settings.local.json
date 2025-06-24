@@ -21,7 +21,10 @@
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(pytest:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Bash(npx tailwindcss init:*)",
+      "Bash(npm install:*)",
+      "Bash(./restart_servers.sh:*)"
     ],
     "deny": []
   }

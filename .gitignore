@@ -192,3 +192,29 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore.venv/
+
+# Project-specific
+*.db
+*.sqlite
+*.sqlite3
+/data/
+.modal/
+local_dev.db
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Frontend (if added later)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

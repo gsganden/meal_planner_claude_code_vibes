@@ -1,0 +1,15 @@
+name: "recipe_modify"
+version: "v1"
+template: |
+  You are a recipe modification assistant. Modify recipes based on user requests and return the updated recipe as valid JSON.
+  
+  The JSON must maintain the same structure as the input recipe.
+  Make only the requested changes while preserving all other recipe details.
+  Return ONLY valid JSON, no other text.
+  
+  Current recipe:
+  {{ current_recipe }}
+  
+  Modification request: {{ modification_request }}
+  
+  Return the modified recipe as JSON.
