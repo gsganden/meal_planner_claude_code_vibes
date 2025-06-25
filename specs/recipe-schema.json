@@ -1,13 +1,10 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Recipe",
-  "description": "Canonical JSON schema for a personal recipe entry used by importer, chat assistant, and storage layer.",
+  "description": "Canonical JSON schema for a personal recipe entry used by chat assistant and storage layer.",
   "type": "object",
   "required": [
-    "title",
-    "yield",
-    "ingredients",
-    "steps"
+    "title"
   ],
   "properties": {
     "id": {
@@ -115,33 +112,6 @@
       },
       "description": "Gallery of one or more finished‑dish photos."
     },
-    "source": {
-      "type": "object",
-      "required": ["type"],
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": ["url", "video", "pdf", "image", "text"],
-          "description": "Origin of the imported recipe."
-        },
-        "url": {
-          "type": "string",
-          "format": "uri",
-          "description": "URL of page or video, if applicable."
-        },
-        "file_name": {
-          "type": "string",
-          "description": "Original file name for PDF/image uploads."
-        }
-      },
-      "additionalProperties": false,
-      "description": "Metadata describing how the recipe was imported."
-    },
-    "visibility": {
-      "type": "string",
-      "enum": ["private"],
-      "description": "Recipe visibility; only 'private' supported in MVP."
-    }
   },
   "additionalProperties": false,
   "examples": [
@@ -159,9 +129,11 @@
         {"order": 1, "text": "Whisk dry ingredients together."},
         {"order": 2, "text": "Add milk and stir until just combined."},
         {"order": 3, "text": "Cook on greased skillet over medium heat until golden."}
-      ],
-      "source": {"type": "url", "url": "https://example.com/pancakes"},
-      "visibility": "private"
+      ]
+    },
+    {
+      "title": "Untitled Recipe 1",
+      "description": "A recipe in progress - details to be added"
     }
   ]
 }

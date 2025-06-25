@@ -19,11 +19,6 @@ class RecipeStep(BaseModel):
     image_url: Optional[str] = None
 
 
-class RecipeSource(BaseModel):
-    type: str = Field(..., pattern="^(url|video|pdf|image|text)$")
-    url: Optional[str] = None
-    file_name: Optional[str] = None
-
 
 class Recipe(BaseModel):
     model_config = ConfigDict(
@@ -31,19 +26,17 @@ class Recipe(BaseModel):
     )
     
     id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()))
-    title: str = Field(...)  # Allow empty string for auto-generation
-    yield_: str = Field(..., alias="yield", min_length=1)
+    title: str = Field(..., min_length=1)  # Only required field
+    yield_: Optional[str] = Field(None, alias="yield")
     description: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     prep_time_minutes: Optional[int] = Field(None, ge=0)
     cook_time_minutes: Optional[int] = Field(None, ge=0)
     tags: Optional[List[str]] = []
-    ingredients: List[RecipeIngredient] = Field(..., min_length=1)
-    steps: List[RecipeStep] = Field(..., min_length=1)
+    ingredients: Optional[List[RecipeIngredient]] = []
+    steps: Optional[List[RecipeStep]] = []
     images: Optional[List[str]] = []
-    source: Optional[RecipeSource] = None
-    visibility: str = Field(default="private", pattern="^private$")
 
 
 class RecipeSummary(BaseModel):
@@ -51,7 +44,7 @@ class RecipeSummary(BaseModel):
     
     id: str
     title: str
-    yield_: str = Field(..., alias="yield")
+    yield_: Optional[str] = Field(None, alias="yield")
     updated_at: datetime
 
 
@@ -65,8 +58,6 @@ class RecipePatch(BaseModel):
     ingredients: Optional[List[RecipeIngredient]] = None
     steps: Optional[List[RecipeStep]] = None
     images: Optional[List[str]] = None
-    source: Optional[RecipeSource] = None
-    visibility: Optional[str] = Field(None, pattern="^private$")
 
 
 # Authentication Schemas
@@ -98,7 +89,6 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: str
     email: str
-    name: str
     created_at: datetime
 
 

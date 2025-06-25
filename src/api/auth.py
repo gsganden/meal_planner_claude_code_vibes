@@ -33,8 +33,7 @@ async def signup(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     # Create new user
     user = User(
         email=user_data.email,
-        password_hash=get_password_hash(user_data.password),
-        name=user_data.email.split("@")[0]  # Default name from email
+        password_hash=get_password_hash(user_data.password)
     )
     db.add(user)
     await db.commit()
@@ -60,7 +59,6 @@ async def signup(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         user=UserResponse(
             id=user.id,
             email=user.email,
-            name=user.name,
             created_at=user.created_at
         )
     )
@@ -100,7 +98,6 @@ async def signin(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
         user=UserResponse(
             id=user.id,
             email=user.email,
-            name=user.name,
             created_at=user.created_at
         )
     )

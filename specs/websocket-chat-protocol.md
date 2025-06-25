@@ -8,19 +8,29 @@
 
 ### 1.1 Connection URL
 ```
-wss://api.myrecipes.app/v1/chat/{recipeId}
+wss://recipe-chat-assistant--fastapi-app.modal.run/v1/chat/{recipeId}
 ```
 
 ### 1.2 Authentication
-- Client must include JWT Bearer token in connection headers
-- Server validates token and recipe ownership before accepting connection
-- Connection rejected with 401 if unauthorized
+- Client establishes WebSocket connection without authentication
+- Client must send authentication message as first message after connection
+- Server validates token and recipe ownership before accepting further messages
+- Connection closed with code 1008 (Policy Violation) if unauthorized
+- Authentication timeout: 5 seconds after connection established
 
-### 1.3 Connection States
+### 1.3 Re-authentication
+- Server tracks JWT token expiration for each connection
+- At 14 minutes (before 15-minute token expiry), server sends `auth_required` message
+- Client automatically refreshes token via `/v1/auth/refresh` endpoint
+- Client sends new token in `auth` message without user intervention
+- If re-authentication fails, connection closed with code 1008
+
+### 1.4 Connection States
 1. **Connecting** - WebSocket handshake in progress
-2. **Connected** - Ready for messages
-3. **Reconnecting** - Auto-retry after disconnect
-4. **Closed** - Terminated by client or server
+2. **Authenticating** - Waiting for auth message
+3. **Connected** - Authenticated and ready for messages
+4. **Reconnecting** - Auto-retry after disconnect
+5. **Closed** - Terminated by client or server
 
 ## 2. Message Format
 
@@ -37,7 +47,24 @@ All messages are JSON with this envelope:
 
 ## 3. Client → Server Messages
 
-### 3.1 Chat Message
+### 3.1 Authentication Message
+```json
+{
+  "type": "auth",
+  "id": "auth_123",
+  "timestamp": "2025-06-23T10:00:00Z",
+  "payload": {
+    "token": "eyJ..."
+  }
+}
+```
+
+**Usage**: 
+- Must be first message after connection established
+- Also sent in response to `auth_required` message from server
+- Contains valid JWT access token
+
+### 3.2 Chat Message
 ```json
 {
   "type": "chat_message",
@@ -57,7 +84,24 @@ All messages are JSON with this envelope:
 
 ## 4. Server → Client Messages
 
-### 4.1 Recipe Update
+### 4.1 Authentication Required
+```json
+{
+  "type": "auth_required",
+  "id": "msg_199",
+  "timestamp": "2025-06-23T10:14:00Z",
+  "payload": {
+    "reason": "Token expiring soon"
+  }
+}
+```
+
+**Usage**: 
+- Sent when JWT token is about to expire (at ~14 minutes)
+- Client should immediately fetch new token and send auth message
+- No other messages accepted until re-authenticated
+
+### 4.2 Recipe Update
 ```json
 {
   "type": "recipe_update",
@@ -90,31 +134,46 @@ All messages are JSON with this envelope:
 
 ## 5. Message Flow Examples
 
-### 5.1 Recipe Extraction
+### 5.1 Initial Connection & Authentication
+```
+Client: Connect to WebSocket
+Client: auth (JWT token)
+Server: (validates token, ready for messages)
+```
+
+### 5.2 Re-authentication Flow
+```
+Server: auth_required (token expiring soon)
+Client: (fetches new token via /v1/auth/refresh)
+Client: auth (new JWT token)
+Server: (validates token, continues normal operation)
+```
+
+### 5.3 Recipe Extraction
 ```
 Client: chat_message ("Extract recipe from: [pasted recipe text]")
 Server: recipe_update (extracted structured recipe with content explaining extraction)
 ```
 
-### 5.2 Recipe Modification  
+### 5.4 Recipe Modification  
 ```
 Client: chat_message ("Make this recipe vegan")
 Server: recipe_update (modified recipe with vegan substitutions + explanation)
 ```
 
-### 5.3 Recipe Generation
+### 5.5 Recipe Generation
 ```
 Client: chat_message ("Create a pasta recipe for 4 people")
 Server: recipe_update (new generated recipe + explanation)
 ```
 
-### 5.4 Error Handling
+### 5.6 Error Handling
 ```
 Client: chat_message ("make this gluten-free")
 Server: recipe_update (error content explaining LLM processing failed)
 ```
 
-### 5.5 Incomplete Recipe Handling
+### 5.7 Incomplete Recipe Handling
 ```
 Client: chat_message ("Extract recipe from: Chocolate cake with flour and eggs")
 Server: recipe_update (content requesting more info, recipe_data: null)
@@ -145,7 +204,8 @@ All errors are communicated via `recipe_update` messages with error content:
 - Invalid JSON from LLM → "Unable to understand the recipe format"
 - LLM timeout → "Request took too long, please try again"  
 - Rate limiting → "Too many requests, please wait a moment"
-- Authentication errors → Close connection, redirect to login
+- Initial auth failure → Close connection with code 1008
+- Re-auth failure → Close connection with code 1008, redirect to login
 - Incomplete recipe data → "I need more information. Could you provide the cooking steps?"
 
 ## 7. Rate Limits

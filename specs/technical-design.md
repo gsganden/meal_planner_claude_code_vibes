@@ -52,8 +52,8 @@
 
 | Table             | Key Columns                                                          |
 | ----------------- | -------------------------------------------------------------------- |
-| `users`           | id, email, password\_hash, name, created\_at                        |
-| `recipes`         | id, owner\_id, recipe\_data (JSONB), created\_at, updated\_at       |
+| `users`           | id (PK), email (unique), password\_hash, created\_at                |
+| `recipes`         | id (PK), owner\_id (FK→users.id), recipe\_data (JSONB), created\_at, updated\_at |
 
 **Key Design Decision**: Recipes are stored as JSONB documents in `recipes.recipe_data`, containing the full recipe JSON as defined in `recipe-schema.json`. This provides:
 - Direct mapping between API and storage layers
@@ -149,22 +149,23 @@ interface AuthState {
 * **Navigation** – Clear back/home navigation from editor to recipe list
 
 ### 7.2  Recipe Creation Flow (New Recipe)
-* **Immediate Creation** – Recipe created immediately with auto-generated title "Untitled Recipe {N}" (auto-incrementing number)
+* **Server-side Creation** – Click "New Recipe" triggers POST to `/v1/recipes` with minimal payload
+* **ID Generation** – Server generates UUID and returns new recipe with auto-title "Untitled Recipe {N}"
+* **Navigation** – After successful creation, client navigates to `/recipe/{id}` using server-provided ID
 * **Initial State** – Recipe form shows auto-title, empty ingredients array, empty steps array, chat prompt: "How can I help you create a recipe?"
-* **WebSocket Connection** – Connects immediately using real recipe ID from database
+* **WebSocket Connection** – Connects using server-generated recipe ID
 * **Autosave** – Begins immediately as user types in form fields or interacts via chat
-* **URL** – Shows `/recipe/{id}` from the start (no URL transitions needed)
 
 ### 7.3  Recipe Editing Flow (Existing Recipe)
-* **Load State** – Recipe data populates form, chat history loads previous conversation
-* **Chat Context** – User sees previous assistant interactions for this recipe
-* **Continuation** – User can continue previous conversation or start new topics
+* **Load State** – Recipe data populates form, chat starts fresh
+* **Chat Context** – No previous chat history stored or displayed
+* **Fresh Start** – Each editing session begins with a new conversation
 
 ### 7.4  Chat‑Driven Recipe Builder
 * **Layout** – Left chat pane (40%), right live recipe form (60%)
 * **Real-time Updates** – Recipe form updates immediately as LLM streams responses
 * **Direct Edit Integration** – Form edits emit system messages: "User updated [field]: [old] → [new]"
-* **Chat History** – Scrollable conversation preserved per recipe
+* **Session-based Chat** – Conversation exists only during active editing session
 
 ### 7.5  Save States & User Feedback
 * **Autosave Indicator** – "Saving..." during 2-second debounce, "Saved" when complete
@@ -172,7 +173,19 @@ interface AuthState {
 * **Explicit Save** – Green "Save Recipe" button for user-initiated saves
 * **Save Failures** – Red error message with retry option
 
-### 7.6  Quick Actions Interface
+### 7.6  Autosave Implementation
+* **Trigger Events** – Any form field change or successful chat recipe update
+* **Debounce Timer** – 2-second delay after last change before save executes
+* **Save Payload** – Full recipe JSON sent to `PATCH /v1/recipes/{id}`
+* **Conflict Resolution** – Last-write-wins, no version checking for MVP
+* **Failure Handling** – Retry up to 3 times with exponential backoff
+* **User Feedback** – Visual indicators for save states:
+  - Yellow border: Changes pending (during debounce)
+  - "Saving...": Request in progress
+  - "Saved": Success confirmation (shows for 2 seconds)
+  - Red banner: Save failed with retry button
+
+### 7.7  Quick Actions Interface
 * **Location** – Toolbar above recipe form with contextual buttons
 * **Actions Available**:
   - "Rewrite" (for any text field) → sends "Please rewrite this [field] to be clearer"
@@ -180,7 +193,18 @@ interface AuthState {
   - "Make Substitutions" → sends "Suggest ingredient substitutions for dietary needs"
 * **Behavior** – Clicking sends predefined message to chat, shows loading state
 
-### 7.7  Error States & Recovery
+### 7.8  Rate Limiting & Abuse Prevention
+* **HTTP API Rate Limits**:
+  - Global: 300 requests/min/IP
+  - Recipe creation: 20 recipes/min/user
+  - Password reset: 5 emails/hour/user
+* **WebSocket Rate Limits**:
+  - Messages: 30 messages/min/connection
+  - Connections: 5 concurrent/user
+  - Message size: 64KB max
+* **User Feedback**: "Too many requests, please wait" with retry after info
+
+### 7.9  Error States & Recovery
 * **Connection Lost** – Red banner: "Connection lost. Reconnecting..." with manual retry
 * **LLM Timeout** – Chat message: "Sorry, that took too long. Please try again."
 * **Invalid Data** – Form field highlights with error message, prevents save
@@ -238,10 +262,10 @@ models:
 All LLM responses must return valid JSON conforming to `recipe-schema.json`
 
 **Minimum Recipe Completeness:**
-- Title (required)
-- Yield/servings (required) 
-- At least 1 ingredient with text, quantity, and unit
-- At least 1 step with order and text
+- Title (required - only hard requirement)
+- Other fields optional to support incremental recipe building
+- LLM should attempt to provide complete recipes when possible
+- Incomplete recipes allowed for work-in-progress scenarios
 
 **Error Handling Requirement:**
 - Invalid JSON responses must be handled gracefully
@@ -285,16 +309,24 @@ template: |
 - Email templates must be user-friendly and branded
 
 **Email Service Integration Requirements:**
-- SMTP service or email API integration
-- Environment variables for email configuration
-- Email address validation and deliverability
+- External email service required (e.g., SendGrid, Resend, AWS SES)
+- API-based integration preferred over SMTP for reliability
+- Use email service's sender domain to avoid deliverability issues
+- Environment variables for API keys and configuration
+- Email address validation before sending
 - Rate limiting for email sending to prevent abuse
+
+**Recommended Services for MVP:**
+- **SendGrid**: 100 emails/day free, reliable API, no domain setup required
+- **Resend**: 100 emails/day free, developer-friendly, provides sender domain
+- **Alternative**: Any transactional email service with API support
 
 **Security Requirements:**
 - Reset tokens must expire within 1 hour
 - Tokens must be single-use only
 - Email sending must be rate-limited per user
 - Failed delivery must be handled gracefully
+- API keys stored securely in Modal secrets
 
 ## 9  Deployment & DevOps on Modal
 
@@ -314,6 +346,11 @@ JWT_SECRET_KEY="secure-random-string"           # For JWT token signing (generat
 # LLM Integration (Google Gemini)
 GOOGLE_API_KEY="your-google-api-key"                                          # From ai.google.dev
 GOOGLE_OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"  # Google's OpenAI endpoint
+
+# Email Service (Required for password reset - example using SendGrid)
+EMAIL_FROM_ADDRESS="noreply@example.com"              # Sender email address (use email service's domain)
+EMAIL_FROM_NAME="Recipe Chat Assistant"               # Sender display name
+SENDGRID_API_KEY="SG.xxx"                            # SendGrid API key (or other email service API key)
 
 # Database (Automatically configured)
 # DATABASE_URL="sqlite+aiosqlite:///data/production.db"                       # Set automatically by app

@@ -1059,3 +1059,23 @@ The application now works as designed with real-time chat updates and recipe mod
 3. Redeploy backend: `modal deploy modal_app.py`
 
 **Lesson Learned**: Always add your production frontend URL to CORS_ORIGINS before deploying
+
+## Vercel SPA Routing Issue
+### Problem:
+- After initial deployment, navigating to any route (e.g., /auth/signin) resulted in 404 errors
+- Vercel was trying to find physical files for each route instead of serving index.html
+
+### Solution:
+Created `vercel.json` in frontend_app with rewrite rules:
+```json
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}
+```
+
+### Lesson Learned:
+- Single-page applications (SPAs) with client-side routing need special configuration on static hosts
+- Vercel needs explicit instructions to serve index.html for all routes
+- Always include vercel.json for React Router applications

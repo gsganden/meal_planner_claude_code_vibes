@@ -99,9 +99,11 @@ class RateLimiter:
 
 
 # Global rate limiter instances
-auth_limiter = RateLimiter(requests_per_minute=10)  # Stricter for auth endpoints
-api_limiter = RateLimiter(requests_per_minute=60)   # General API endpoints
+auth_limiter = RateLimiter(requests_per_minute=10)  # Auth endpoints (general)
+api_limiter = RateLimiter(requests_per_minute=300)  # Global API limit per IP
 websocket_limiter = RateLimiter(requests_per_minute=30)  # WebSocket messages
+recipe_creation_limiter = RateLimiter(requests_per_minute=20)  # Recipe creation per user
+password_reset_limiter = RateLimiter(requests_per_minute=5)  # Password reset emails (5/hour = ~5/60min)
 
 
 async def rate_limit_middleware(request: Request, call_next):
@@ -123,10 +125,16 @@ async def rate_limit_middleware(request: Request, call_next):
         except Exception:
             pass  # Ignore invalid tokens for rate limiting purposes
     
-    # Determine which limiter to use based on path
+    # Determine which limiter to use based on path and method
     path = request.url.path
+    method = request.method
     
-    if path.startswith("/v1/auth/"):
+    # Specific endpoint limits
+    if path == "/v1/auth/forgot-password" and method == "POST":
+        limiter = password_reset_limiter
+    elif path == "/v1/recipes" and method == "POST":
+        limiter = recipe_creation_limiter
+    elif path.startswith("/v1/auth/"):
         limiter = auth_limiter
     elif path.startswith("/v1/chat/"):
         limiter = websocket_limiter
