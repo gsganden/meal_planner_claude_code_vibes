@@ -7,40 +7,177 @@ info:
     recipes. All endpoints are **user-scoped** - authenticated users can only
     access and modify their own recipes. Authentication required via JWT Bearer token.
 servers:
-  - url: https://api.myrecipes.app
+  - url: https://recipe-chat-assistant--fastapi-app.modal.run
 security:
   - bearerAuth: []
 paths:
-  /v1/auth/login:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns server health status. No authentication required.
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+  
+  /v1/auth/signup:
     post:
-      summary: Exchange OAuth code or email magic‑link token for JWT pair.
+      summary: Create new user account with email and password.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [grant_type, token]
+              required: [email, password, confirmPassword]
               properties:
-                grant_type:
+                email:
                   type: string
-                  enum: [email_magic, oauth]
-                token:
+                  format: email
+                  description: User's email address (must be unique)
+                password:
                   type: string
+                  minLength: 8
+                  description: Password with at least one letter and one number
+                confirmPassword:
+                  type: string
+                  description: Must match password field
       responses:
-        "200":
-          description: Login successful.
+        "201":
+          description: Account created successfully.
           content:
             application/json:
               schema:
                 type: object
-                required: [access_token, refresh_token]
+                required: [access_token, refresh_token, user]
                 properties:
                   access_token:
                     type: string
+                    description: JWT access token valid for 15 minutes
                   refresh_token:
                     type: string
+                    description: Refresh token valid for 7 days
+                  user:
+                    $ref: '#/components/schemas/User'
         "400": { $ref: '#/components/responses/BadRequest' }
+        "409":
+          description: Email already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/auth/signin:
+    post:
+      summary: Authenticate existing user with email and password.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Authentication successful.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, refresh_token, user]
+                properties:
+                  access_token:
+                    type: string
+                    description: JWT access token valid for 15 minutes
+                  refresh_token:
+                    type: string
+                    description: Refresh token valid for 7 days
+                  user:
+                    $ref: '#/components/schemas/User'
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401":
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/auth/forgot-password:
+    post:
+      summary: Send password reset email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Reset instructions sent if account exists.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "If an account exists with this email, you'll receive password reset instructions"
+        "400": { $ref: '#/components/responses/BadRequest' }
+
+  /v1/auth/reset-password:
+    post:
+      summary: Reset password with token from email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token:
+                  type: string
+                  description: Reset token from email
+                newPassword:
+                  type: string
+                  minLength: 8
+                  description: New password with at least one letter and one number
+      responses:
+        "200":
+          description: Password reset successful.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Password updated successfully"
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401":
+          description: Invalid or expired reset token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /v1/auth/refresh:
     post:
@@ -66,8 +203,10 @@ paths:
                 properties:
                   access_token:
                     type: string
+                    description: JWT access token valid for 15 minutes
                   refresh_token:
                     type: string
+                    description: Refresh token valid for 7 days
         "401": { $ref: '#/components/responses/Unauthorized' }
 
   /v1/auth/logout:
@@ -162,13 +301,38 @@ paths:
         "404": { $ref: '#/components/responses/NotFound' }
 
 
-  # WebSocket definition (non‑standard OpenAPI) for chat
-  x-websocket:
-    /v1/chat/{recipeId}:
-      description: Bidirectional chat stream for recipe editing.
-      bindings:
-        recipeId:
-          $ref: '#/components/parameters/recipeId'
+  /v1/chat/{recipeId}:
+    parameters:
+      - $ref: '#/components/parameters/recipeId'
+    get:
+      summary: WebSocket endpoint for real-time recipe chat and editing
+      description: |
+        Establishes a WebSocket connection for bidirectional communication between client and server.
+        Used for chat-based recipe creation, extraction, and modification with live updates.
+        
+        **Authentication**: JWT Bearer token sent as first message after connection
+        **Protocol**: See websocket-chat-protocol.md for all message formats and protocol details
+        
+        **Client → Server Messages**:
+        - `chat_message`: User input for recipe operations (extraction, generation, modification)
+        
+        **Server → Client Messages**:
+        - `recipe_update`: Recipe data updates with assistant responses
+        
+        **Connection States**:
+        - Connecting: WebSocket handshake in progress
+        - Connected: Ready for messages
+        - Reconnecting: Auto-retry after disconnect
+        - Closed: Terminated by client or server
+      tags:
+        - WebSocket
+      responses:
+        "101":
+          description: Switching Protocols - WebSocket connection established
+        "401":
+          description: Unauthorized - Invalid or missing JWT token
+        "404":
+          description: Recipe not found or not owned by authenticated user
 
 components:
   securitySchemes:
@@ -214,7 +378,7 @@ components:
 
   schemas:
     Recipe:
-      $ref: 'recipe-schema.json'
+      $ref: './recipe-schema.json'
     RecipeSummary:
       type: object
       required: [id, title, yield, updated_at]
@@ -232,13 +396,29 @@ components:
     RecipePatch:
       description: >-
         Partial update payload; any Recipe field can be provided. The backend
-        performs validation and merges with latest version, returning new
-        version of the Recipe.
+        performs validation and replaces the current state, returning the
+        updated Recipe. No version history is maintained.
       type: object
       allOf:
         - $ref: '#/components/schemas/Recipe'
       example:
         title: "Classic Pancakes (Gluten‑Free)"
+    User:
+      type: object
+      required: [id, email, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique user identifier
+        email:
+          type: string
+          format: email
+          description: User's email address
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp
     Error:
       type: object
       required: [error, message]

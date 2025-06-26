@@ -19,13 +19,12 @@
 | F3 | **Chat‑Driven Editing** – two‑pane interface: chat + live recipe preview. |
 | F4 | **Direct Field Editing** – user edits any field; syncs into chat context. |
 | F5 | **Simple Storage** – recipes stored chronologically, no versioning.       |
-| F6 | **JSON Backup** – export all recipes as JSON for backup.                  |
 
 ## 3  Non‑Functional Requirements
 
 * **Latency** – p95 <200 ms read, <400 ms write.
 * **Offline** – IndexedDB cache for viewing & editing without network.
-* **Security** – data encrypted at rest (AES‑256 Postgres) and in transit (HTTPS).
+* **Security** – data encrypted at rest (SQLite on Modal Volume) and in transit (HTTPS).
 * **Accessibility** – WCAG 2.1 AA.
 
 ## 4  High‑Level Architecture
@@ -53,8 +52,8 @@
 
 | Table             | Key Columns                                                          |
 | ----------------- | -------------------------------------------------------------------- |
-| `users`           | id, email, password\_hash, name, created\_at                        |
-| `recipes`         | id, owner\_id, recipe\_data (JSONB), created\_at, updated\_at       |
+| `users`           | id (PK), email (unique), password\_hash, created\_at                |
+| `recipes`         | id (PK), owner\_id (FK→users.id), recipe\_data (JSONB), created\_at, updated\_at |
 
 **Key Design Decision**: Recipes are stored as JSONB documents in `recipes.recipe_data`, containing the full recipe JSON as defined in `recipe-schema.json`. This provides:
 - Direct mapping between API and storage layers
@@ -150,22 +149,23 @@ interface AuthState {
 * **Navigation** – Clear back/home navigation from editor to recipe list
 
 ### 7.2  Recipe Creation Flow (New Recipe)
-* **Immediate Creation** – Recipe created immediately with auto-generated title "Untitled Recipe {N}" (auto-incrementing number)
+* **Server-side Creation** – Click "New Recipe" triggers POST to `/v1/recipes` with minimal payload
+* **ID Generation** – Server generates UUID and returns new recipe with auto-title "Untitled Recipe {N}"
+* **Navigation** – After successful creation, client navigates to `/recipe/{id}` using server-provided ID
 * **Initial State** – Recipe form shows auto-title, empty ingredients array, empty steps array, chat prompt: "How can I help you create a recipe?"
-* **WebSocket Connection** – Connects immediately using real recipe ID from database
+* **WebSocket Connection** – Connects using server-generated recipe ID
 * **Autosave** – Begins immediately as user types in form fields or interacts via chat
-* **URL** – Shows `/recipe/{id}` from the start (no URL transitions needed)
 
 ### 7.3  Recipe Editing Flow (Existing Recipe)
-* **Load State** – Recipe data populates form, chat history loads previous conversation
-* **Chat Context** – User sees previous assistant interactions for this recipe
-* **Continuation** – User can continue previous conversation or start new topics
+* **Load State** – Recipe data populates form, chat starts fresh
+* **Chat Context** – No previous chat history stored or displayed
+* **Fresh Start** – Each editing session begins with a new conversation
 
 ### 7.4  Chat‑Driven Recipe Builder
 * **Layout** – Left chat pane (40%), right live recipe form (60%)
 * **Real-time Updates** – Recipe form updates immediately as LLM streams responses
 * **Direct Edit Integration** – Form edits emit system messages: "User updated [field]: [old] → [new]"
-* **Chat History** – Scrollable conversation preserved per recipe
+* **Session-based Chat** – Conversation exists only during active editing session
 
 ### 7.5  Save States & User Feedback
 * **Autosave Indicator** – "Saving..." during 2-second debounce, "Saved" when complete
@@ -173,7 +173,19 @@ interface AuthState {
 * **Explicit Save** – Green "Save Recipe" button for user-initiated saves
 * **Save Failures** – Red error message with retry option
 
-### 7.6  Quick Actions Interface
+### 7.6  Autosave Implementation
+* **Trigger Events** – Any form field change or successful chat recipe update
+* **Debounce Timer** – 2-second delay after last change before save executes
+* **Save Payload** – Full recipe JSON sent to `PATCH /v1/recipes/{id}`
+* **Conflict Resolution** – Last-write-wins, no version checking for MVP
+* **Failure Handling** – Retry up to 3 times with exponential backoff
+* **User Feedback** – Visual indicators for save states:
+  - Yellow border: Changes pending (during debounce)
+  - "Saving...": Request in progress
+  - "Saved": Success confirmation (shows for 2 seconds)
+  - Red banner: Save failed with retry button
+
+### 7.7  Quick Actions Interface
 * **Location** – Toolbar above recipe form with contextual buttons
 * **Actions Available**:
   - "Rewrite" (for any text field) → sends "Please rewrite this [field] to be clearer"
@@ -181,7 +193,18 @@ interface AuthState {
   - "Make Substitutions" → sends "Suggest ingredient substitutions for dietary needs"
 * **Behavior** – Clicking sends predefined message to chat, shows loading state
 
-### 7.7  Error States & Recovery
+### 7.8  Rate Limiting & Abuse Prevention
+* **HTTP API Rate Limits**:
+  - Global: 300 requests/min/IP
+  - Recipe creation: 20 recipes/min/user
+  - Password reset: 5 emails/hour/user
+* **WebSocket Rate Limits**:
+  - Messages: 30 messages/min/connection
+  - Connections: 5 concurrent/user
+  - Message size: 64KB max
+* **User Feedback**: "Too many requests, please wait" with retry after info
+
+### 7.9  Error States & Recovery
 * **Connection Lost** – Red banner: "Connection lost. Reconnecting..." with manual retry
 * **LLM Timeout** – Chat message: "Sorry, that took too long. Please try again."
 * **Invalid Data** – Form field highlights with error message, prevents save
@@ -191,7 +214,7 @@ interface AuthState {
 
 ### 8.1  Gemini API via OpenAI-Compatible Interface
 
-**Service Provider:** Google Gemini 2.5 Pro via Google's official OpenAI-compatible API  
+**Service Provider:** Google Gemini 2.5 Flash via Google's official OpenAI-compatible API  
 **Documentation:** https://ai.google.dev/gemini-api/docs/openai  
 **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/openai/`
 
@@ -220,39 +243,35 @@ GOOGLE_OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/
 
 ### 8.3  Model Configuration
 
-**Primary Model:** `gemini-2.5-pro` (Google's most capable model)  
-**Fallback Model:** `gemini-1.5-pro` (stable production)
+**Primary Model:** `gemini-2.5-flash` (Google's fast, efficient model)  
+**Single Model for MVP:** `gemini-2.5-flash` (no fallback needed for MVP)
 
 **LLM Registry Configuration:**
 ```yaml
 models:
   default:
-    model: "gemini-2.5-pro"
+    model: "gemini-2.5-flash"
     settings:
       temperature: 0.1
       max_tokens: 2048
-  fast:
-    model: "gemini-2.5-pro"
-    settings:
-      temperature: 0.2
-      max_tokens: 1024
 ```
 
-### 8.4  Implementation Pattern
+### 8.4  Response Requirements
 
-```python
-import openai
+**Structured Data Requirement:**
+All LLM responses must return valid JSON conforming to `recipe-schema.json`
 
-client = openai.OpenAI(
-    api_key=os.environ["GOOGLE_API_KEY"],        # Google API key, not OpenAI
-    base_url=os.environ["GOOGLE_OPENAI_BASE_URL"] # Google's OpenAI-compatible endpoint
-)
+**Minimum Recipe Completeness:**
+- Title (required - only hard requirement)
+- Other fields optional to support incremental recipe building
+- LLM should attempt to provide complete recipes when possible
+- Incomplete recipes allowed for work-in-progress scenarios
 
-response = client.chat.completions.create(
-    model="gemini-2.5-pro",
-    messages=[{"role": "user", "content": "Extract recipe from: ..."}]
-)
-```
+**Error Handling Requirement:**
+- Invalid JSON responses must be handled gracefully
+- Incomplete recipes must prompt user for more information
+- Failed requests must show user-friendly error messages
+- System should retry failed requests with improved prompts
 
 ### 8.5  Prompt Library Integration
 
@@ -281,6 +300,34 @@ template: |
 * **Concurrency Limits** – set per function (`concurrency_limit=10`); CPU tier for most models.
 * **Retries** – Modal built‑in retries; graceful fallback for LLM failures in chat.
 
+### 8.7  Email Service Requirements
+
+**Password Reset Functionality:**
+- System must send password reset emails to users
+- Emails must contain secure, time-limited reset tokens
+- Reset links must redirect to password reset form
+- Email templates must be user-friendly and branded
+
+**Email Service Integration Requirements:**
+- External email service required (e.g., SendGrid, Resend, AWS SES)
+- API-based integration preferred over SMTP for reliability
+- Use email service's sender domain to avoid deliverability issues
+- Environment variables for API keys and configuration
+- Email address validation before sending
+- Rate limiting for email sending to prevent abuse
+
+**Recommended Services for MVP:**
+- **SendGrid**: 100 emails/day free, reliable API, no domain setup required
+- **Resend**: 100 emails/day free, developer-friendly, provides sender domain
+- **Alternative**: Any transactional email service with API support
+
+**Security Requirements:**
+- Reset tokens must expire within 1 hour
+- Tokens must be single-use only
+- Email sending must be rate-limited per user
+- Failed delivery must be handled gracefully
+- API keys stored securely in Modal secrets
+
 ## 9  Deployment & DevOps on Modal
 
 ### 9.1  Modal App Configuration
@@ -299,6 +346,11 @@ JWT_SECRET_KEY="secure-random-string"           # For JWT token signing (generat
 # LLM Integration (Google Gemini)
 GOOGLE_API_KEY="your-google-api-key"                                          # From ai.google.dev
 GOOGLE_OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"  # Google's OpenAI endpoint
+
+# Email Service (Required for password reset - example using SendGrid)
+EMAIL_FROM_ADDRESS="noreply@example.com"              # Sender email address (use email service's domain)
+EMAIL_FROM_NAME="Recipe Chat Assistant"               # Sender display name
+SENDGRID_API_KEY="SG.xxx"                            # SendGrid API key (or other email service API key)
 
 # Database (Automatically configured)
 # DATABASE_URL="sqlite+aiosqlite:///data/production.db"                       # Set automatically by app
@@ -320,34 +372,32 @@ CORS_ORIGINS="https://recipe-chat-assistant.vercel.app,http://localhost:3000"
 | **Verify**        | Test `/health` endpoint at `https://recipe-chat-assistant--fastapi-app.modal.run/health`                   |
 | **Monitor**       | Modal dashboard for logs, metrics, and scaling                                                              |
 
-### 9.4  Implementation Requirements from Specification
+### 9.4  System Configuration Requirements
 
-**Configuration Changes Required:**
-1. **Environment Variables:** Update `src/models/config.py` to use `GOOGLE_API_KEY` and `GOOGLE_OPENAI_BASE_URL`
-2. **LLM Client:** Update `src/llm/client.py` to use Google credentials instead of OpenAI credentials  
-3. **Model Registry:** Update `llm_registry.yaml` to use `gemini-2.5-pro` as default model
-4. **Modal Volume:** Update `modal_app.py` to create and mount Modal Volume for SQLite persistence
-5. **Database Path:** Configure DATABASE_URL to use volume mount path (`/data/production.db`)
-6. **Deployment:** Update deployment scripts to handle volume creation and SQLite initialization
+**Environment Configuration:**
+The application requires these environment variables for proper operation:
+- **`GOOGLE_API_KEY`**: Google API key for Gemini model access
+- **`GOOGLE_OPENAI_BASE_URL`**: Google's OpenAI-compatible endpoint URL
+- **`JWT_SECRET_KEY`**: Secure random string for JWT token signing
+- **`DATABASE_URL`**: SQLite database path on Modal volume (`/data/production.db`)
 
-**Modal Resources Creation:**
-```bash
-# Create volume for persistent SQLite storage
-modal volume create recipe-data-volume
+**LLM Integration:**
+- Application uses Google Gemini 2.5 Flash via OpenAI-compatible interface
+- Model client authenticates with Google API key (not OpenAI key)
+- Default model configured as `gemini-2.5-flash` in model registry
 
-# Create secret with credentials (DATABASE_URL set automatically)
-modal secret create recipe-chat-secrets \
-  JWT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" \
-  GOOGLE_API_KEY="your-google-api-key" \
-  GOOGLE_OPENAI_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
-```
+**Storage Requirements:**
+- Modal Volume mounted at `/data` for SQLite database persistence
+- Database file located at `/data/production.db` on the mounted volume
+- Volume provides durability and backup for all recipe and user data
 
-**Validation Steps:**
-1. Verify `health` endpoint responds with 200 OK
-2. Test authentication with `/v1/auth/login`
-3. Test recipe creation with `/v1/recipes`
-4. Test WebSocket chat at `/v1/chat/{recipe_id}`
-5. Verify LLM integration with recipe extraction/generation
+**Deployment Validation:**
+The deployed system should satisfy these functional requirements:
+1. Health endpoint returns 200 OK status
+2. User authentication flow works end-to-end
+3. Recipe CRUD operations function correctly
+4. WebSocket chat connections establish successfully
+5. LLM integration processes recipe requests properly
 
 ## 10  Database Strategy: SQLite on Modal Volumes
 

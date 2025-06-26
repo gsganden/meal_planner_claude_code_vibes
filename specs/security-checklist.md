@@ -8,22 +8,22 @@
 
 | #   | Checklist Item                                                                                                           | Owner  | Phase  |
 | --- | ------------------------------------------------------------------------------------------------------------------------ | ------ | ------ |
-| 1.1 | OAuth & magic‑link flows require **PKCE** (if public client) or signed JWT redirect URIs.                                | Dev    | Dev    |
-| 1.2 | JWT access tokens ≤15 min; refresh ≤7 days; **rotate refresh ID** on use.                                                | Dev    | Dev    |
-| 1.3 | Token secrets (JWT signing key) stored only in Modal secret **`recipe_secrets`**; never in code or env committed to VCS. | DevOps | Deploy |
+| 1.1 | Email/password authentication uses secure password hashing (**bcrypt ≥12 rounds**) and input validation.                | Dev    | Dev    |
+| 1.2 | JWT access tokens exactly 15 min; refresh tokens 7 days; **rotate refresh ID** on use.                                    | Dev    | Dev    |
+| 1.3 | Token secrets (JWT signing key) stored only in Modal secret **`recipe-chat-secrets`**; never in code or env committed to VCS. | DevOps | Deploy |
 
 ## 2. Authorization
 
 | #   | Checklist Item                                                                                      | Owner | Phase |
 | --- | --------------------------------------------------------------------------------------------------- | ----- | ----- |
 | 2.1 | All DB queries filter by `user_id`; no cross‑tenant access. Unit test coverage for "leakage" cases. | Dev   | Dev   |
-| 2.2 | Import status polling (`/v1/import/{id}`) checks job's `user_id` matches auth identity.             | Dev   | Dev   |
+| 2.2 | Recipe access (`/v1/recipes/{id}`) checks recipe's `owner_id` matches authenticated user.           | Dev   | Dev   |
 
 ## 3. Data Protection & Privacy
 
 | #   | Checklist Item                                                                   | Owner   | Phase       |
 | --- | -------------------------------------------------------------------------------- | ------- | ----------- |
-| 3.1 | **AES‑256‑GCM** at‑rest encryption enabled for Postgres (Neon/Supabase default). | DevOps  | Deploy      |
+| 3.1 | **Volume encryption** enabled for SQLite on Modal Volume (Modal default). | DevOps  | Deploy      |
 | 3.2 | All backups encrypted with server‑side encryption and stored in private bucket.  | DevOps  | Post‑Deploy |
 | 3.3 | PII limited to email; no ingredient or recipe data considered sensitive.         | Product | Review      |
 
@@ -40,7 +40,7 @@
 | --- | ------------------------------------------------------------------------------ | ----- | ----- |
 | 5.1 | All API payloads validated by Pydantic models or `pydantic‑core` before use.   | Dev   | Dev   |
 | 5.2 | LLM JSON output validated against `recipe_schema.json`; reject parsing errors. | Dev   | Dev   |
-| 5.3 | File uploads (PDF, image) scan mime type magic bytes & size ≤25 MB.            | Dev   | Dev   |
+| 5.3 | Recipe text input sanitized and validated; LLM responses validated before storage. | Dev   | Dev   |
 
 ## 6. Dependency & Supply‑Chain Security
 
@@ -55,14 +55,14 @@
 | #   | Checklist Item                                                                    | Owner  | Phase       |
 | --- | --------------------------------------------------------------------------------- | ------ | ----------- |
 | 7.1 | All secrets injected via `modal.Secret` object; no `os.environ` defaults in code. | DevOps | Deploy      |
-| 7.2 | Rotate `OPENAI_API_KEY`, DB passwords every 90 days; document rotation SOP.       | DevOps | Post‑Deploy |
+| 7.2 | Rotate `GOOGLE_API_KEY`, DB passwords every 90 days; document rotation SOP.       | DevOps | Post‑Deploy |
 
 ## 8. Rate Limiting & Abuse Prevention
 
 | #   | Checklist Item                                                                | Owner | Phase |
 | --- | ----------------------------------------------------------------------------- | ----- | ----- |
 | 8.1 | Global rate limit: 300 requests/min/IP via FastAPI Limiter or gateway config. | Dev   | Dev   |
-| 8.2 | Import start endpoint limited to 20 jobs/min/user.                            | Dev   | Dev   |
+| 8.2 | Recipe creation endpoint limited to 20 recipes/min/user.                      | Dev   | Dev   |
 
 ## 9. Logging & Monitoring Security
 

@@ -21,19 +21,19 @@ repo_root/
 ```yaml
 models:
   default:            # logical name used by prompts
-    provider: openai
-    model: gemini-2.5-pro  # Gemini 2.5 Pro via OpenAI interface
+    provider: google
+    model: gemini-2.5-flash  # Google Gemini 2.5 Flash
     settings:
       temperature: 0.2
       top_p: 1
   fast:
-    provider: openai
-    model: gemini-2.5-pro  # Same model for consistency
+    provider: google
+    model: gemini-2.5-flash  # Same model for consistency
     settings:
       temperature: 0.4
   fallback:
-    provider: openai
-    model: gpt-4o
+    provider: google
+    model: gemini-2.5-flash  # Same model for MVP simplicity
     settings:
       temperature: 0.2
 ```
@@ -51,6 +51,10 @@ model_ref: default|fast|fallback  # Logical name from registry
 schema_ref: recipe_schema.json     # Optional JSON Schema for output
 variables:                        # Runtime placeholders
   dish_name: "Name of dish"
+requirements: |                   # Optional output requirements
+  - Recipes must have a title (required)
+  - Attempt to provide complete recipes when possible
+  - Allow incomplete recipes for work-in-progress
 content: |
   You are a culinary data extractor...
 ```

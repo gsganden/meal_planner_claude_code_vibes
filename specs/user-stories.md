@@ -158,7 +158,7 @@
 **Alternative Flows:**
 - 3a. User types weak password in signup → sees "Password must be at least 8 characters with at least one letter and one number" help text
 - 4a. User switches from signup to signin mode → password and confirm password fields clear, email field retains value, error messages clear
-- 4b. User switches from signin to signup mode → password field clears, form shows additional confirm password and name fields
+- 4b. User switches from signin to signup mode → password field clears, form shows additional confirm password field
 
 **UC0.0.7: Loading States and Application Initialization**
 
@@ -235,15 +235,16 @@
 **Primary Flow - New User (First Recipe):**
 1. User successfully signed up and sees empty recipe list with "Create Your First Recipe" message
 2. User clicks "New Recipe" button or "Create Your First Recipe" button  
-3. System immediately creates new recipe with title "Untitled Recipe 1" and redirects to `/recipe/{id}`
-4. User lands in recipe editor with auto-generated title, empty ingredients/steps arrays, and chat prompt: "How can I help you create a recipe?"
-5. User proceeds with recipe creation via chat or direct form editing, with autosave active from the start
+3. System shows brief loading state while creating recipe on server
+4. Server creates recipe with UUID and title "Untitled Recipe 1", then redirects to `/recipe/{id}`
+5. User lands in recipe editor with auto-generated title, empty ingredients/steps arrays, and chat prompt: "How can I help you create a recipe?"
+6. User proceeds with recipe creation via chat or direct form editing, with autosave active from the start
 
 **Primary Flow - Returning User (Existing Recipes):**
 1. User successfully signed in and sees recipe list in reverse chronological order (newest first)
 2. User scrolls through recipes, seeing titles, descriptions, and last updated dates
 3. User clicks recipe title to open in editor
-4. User lands in editor with structured form populated and chat history loaded
+4. User lands in editor with structured form populated, chat starts fresh
 
 **Alternative Flows:**
 - 1a. User clicks "New Recipe" to create fresh recipe instead of editing existing
@@ -270,7 +271,7 @@
 ### UC2: Refine Recipe via Chat
 
 **Primary Flow:**
-1. User opens existing recipe in editor (structured form populated, chat history loaded)
+1. User opens existing recipe in editor (structured form populated, chat starts fresh)
 2. User types request in chat (e.g., "make this vegan")
 3. AI responds: "I'll modify the ingredients to make this vegan..." and updates form fields in real-time
 4. User sees ingredient lines change (e.g., "milk" → "oat milk"), steps updated as needed

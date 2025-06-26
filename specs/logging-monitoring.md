@@ -1,8 +1,25 @@
 # Logging & Monitoring Spec (v0.1)
 
-> **Goal:** Provide uniform observability across API, import worker, and LLM router functions while running on Modal and Postgres. This spec defines log structure, metrics, dashboards, and alert thresholds required for the MVP.
+> **Goal:** Provide uniform observability across API and LLM router functions while running on Modal with SQLite for application data and Modal's logging system for operational logs. This spec defines log structure, metrics, dashboards, and alert thresholds required for the MVP.
 
 ---
+
+## Data Storage Architecture
+
+**Application Data Storage:**
+- **SQLite on Modal Volume**: User accounts, recipes, application state
+- **Purpose**: Persistent application data that requires ACID transactions and structured queries
+
+**Operational Data Storage:**
+- **Modal Logging System**: Request logs, error logs, performance metrics, debug information
+- **Purpose**: Operational observability, debugging, monitoring, alerting
+- **Retention**: Managed automatically by Modal platform
+
+**Separation Benefits:**
+- Application performance not impacted by log volume
+- Independent retention and access policies
+- Modal handles log rotation, aggregation, and dashboard integration
+- SQLite optimized purely for application data queries
 
 ## 1. Logging
 
@@ -16,12 +33,11 @@
   | ----------- | --------------- | ---------------------------------------- | ------------------------------ |
   | `ts`        | RFC 3339 string | `2025-06-23T19:02:11.123Z`               | UTC only                       |
   | `level`     | string          | `INFO`, `WARN`, `ERROR`                  |                                |
-  | `service`   | string          | `api` \| `import_worker` \| `llm_router` |                                |
+  | `service`   | string          | `api` \| `llm_router`                    |                                |
   | `req_id`    | UUID            | `70af…`                                  | Correlates logs across modules |
   | `user_id`   | UUID            | `18a0…`                                  | Optional (null for unauth)     |
   | `recipe_id` | UUID            | `f3db…`                                  | Optional                       |
-  | `job_id`    | UUID            | `c1b2…`                                  | For import jobs                |
-  | `event`     | string          | `import_started`, `llm_call`, `db_query` |                                |
+  | `event`     | string          | `llm_call`, `db_query`, `auth_attempt`   |                                |
   | `msg`       | string          | Human message                            |                                |
   | `extra`     | object          | provider‑specific payload                | Free‑form JSON                 |
 
@@ -29,8 +45,8 @@
 
 ### 1.2 Correlation IDs
 
-* API entrypoint generates `req_id` (uuid4) per HTTP/WebSocket request and passes it via context var into worker spawns and LLM calls.
-* Workers include original `req_id` plus their own `job_id`.
+* API entrypoint generates `req_id` (uuid4) per HTTP/WebSocket request and passes it via context var into LLM calls.
+* All log entries for a single request share the same `req_id` for traceability.
 
 ### 1.3 Log Levels & Sampling
 
@@ -51,8 +67,8 @@
 | Metric                          | Type      | Labels                          | Description                |
 | ------------------------------- | --------- | ------------------------------- | -------------------------- |
 | `http_request_duration_seconds` | Histogram | `method`, `path`, `status`      | API latency                |
-| `import_job_latency_seconds`    | Histogram | `source_type`, `status`         | End‑to‑end import time     |
-| `import_job_failures_total`     | Counter   | `error_code`                    | Failed imports             |
+| `websocket_connections_active`  | Gauge     | `recipe_id`                     | Active WebSocket connections |
+| `auth_attempts_total`           | Counter   | `type`, `status`                | Authentication attempts    |
 | `llm_call_tokens_total`         | Counter   | `provider`, `model_ref`, `role` | Prompt + completion tokens |
 | `llm_call_latency_seconds`      | Histogram | `provider`, `model_ref`         | LLM response time          |
 | `db_query_seconds`              | Histogram | `operation`                     | SQL latency                |
@@ -63,9 +79,10 @@ Buckets: `[0.1, 0.3, 1, 3, 10, 30, 60, 120]` seconds.
 
 | SLI                                       | Target             |
 | ----------------------------------------- | ------------------ |
-| Import success rate (`completed / total`) | ≥ 97 % rolling 7 d |
+| API success rate (`2xx / total`)          | ≥ 99 % rolling 7 d |
 | p95 API latency (`GET /v1/recipes/{id}`)  | < 200 ms           |
-| p95 import latency (URL <2 MB)            | < 20 s             |
+| p95 WebSocket message processing          | < 5 s              |
+| Authentication success rate               | ≥ 95 % rolling 24h |
 
 ---
 
@@ -74,17 +91,18 @@ Buckets: `[0.1, 0.3, 1, 3, 10, 30, 60, 120]` seconds.
 | Alert                     | Condition                                                                | Severity | Action        |
 | ------------------------- | ------------------------------------------------------------------------ | -------- | ------------- |
 | **High API error rate**   | `5 min avg rate(http_request_total{status=~"5.."}) > 1/s`                | P1       | PagerDuty     |
-| **Import failures spike** | `import_job_failures_total` increase > 50 in 15 min                      | P2       | Slack #alerts |
+| **Auth failures spike**   | `auth_attempts_total{status="failed"}` increase > 100 in 15 min          | P2       | Slack #alerts |
 | **LLM latency**           | p95 `llm_call_latency_seconds` > 10 s for 5 min                          | P2       | Slack         |
-| **DB slow queries**       | p95 `db_query_seconds{operation="INSERT import_jobs"} > 1 s` over 10 min | P3       | Slack         |
+| **DB slow queries**       | p95 `db_query_seconds{operation="INSERT recipes"} > 1 s` over 10 min     | P3       | Slack         |
 
 ---
 
 ## 4. Dashboards
 
 * **API Overview** – Requests/s, latency percentiles, error codes.
-* **Import Pipeline** – Jobs by status, latency histogram, top error codes.
+* **Authentication** – Login attempts, success rates, password reset flows.
 * **LLM Usage & Cost** – Token counters by provider/model, latency.
+* **WebSocket Health** – Active connections, message rates, disconnection reasons.
 * **DB Performance** – TPS, slowest queries, connections.
 
 Dashboard JSON lives under `observability/grafana/` and is imported on Grafana startup.
@@ -96,7 +114,7 @@ Dashboard JSON lives under `observability/grafana/` and is imported on Grafana s
 * [ ] Install `structlog`, `prometheus_client` in `requirements.txt`.
 * [ ] Configure `structlog` JSON renderer in `app.__init__`.
 * [ ] Middleware to generate `req_id` and push to context var.
-* [ ] Decorator `@metric_timer` to wrap key functions (import\_worker phases, LLM calls).
+* [ ] Decorator `@metric_timer` to wrap key functions (auth flows, LLM calls, WebSocket handlers).
 * [ ] `observability/README.md` with Grafana import instructions.
 
 ---

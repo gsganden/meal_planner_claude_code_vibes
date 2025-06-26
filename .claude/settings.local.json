@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(source:*)",
+      "Bash(/Users/greg/repos/.venv/bin/python -m pytest tests/ -v)",
+      "Bash(/Users/greg/repos/.venv/bin/python -m pytest tests/test_recipe_schema.py -v)",
+      "Bash(/Users/greg/repos/.venv/bin/python -m pytest tests/test_recipe_schema.py::TestRecipeSchemaCompliance::test_minimal_valid_recipe -v)",
+      "Bash(/Users/greg/repos/.venv/bin/python -m pytest tests/test_recipe_schema.py::TestRecipeSchemaCompliance::test_minimal_valid_recipe -v -s)",
+      "Bash(/Users/greg/repos/.venv/bin/python -c \"\nfrom src.models.recipe import Recipe\nrecipe_data = {\n    'title': 'Test Recipe',\n    'yield': '2 servings',\n    'ingredients': [{'text': '1 cup flour', 'quantity': 1, 'unit': 'cup'}],\n    'steps': [{'order': 1, 'text': 'Mix ingredients'}]\n}\nrecipe = Recipe.model_validate(recipe_data)\nprint('Recipe created:', recipe.title)\n\")",
+      "WebFetch(domain:modal.com)",
+      "Bash(modal:*)",
+      "Bash(.venv/bin/python:*)",
+      "Bash(rg:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm install)",
+      "Bash(npm run build:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(pytest:*)",
+      "Bash(npm test:*)",
+      "Bash(npx tailwindcss init:*)",
+      "Bash(npm install:*)",
+      "Bash(./restart_servers.sh:*)"
+    ],
+    "deny": []
+  }
+}
