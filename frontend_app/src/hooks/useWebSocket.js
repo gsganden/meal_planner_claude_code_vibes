@@ -14,12 +14,18 @@ export function useWebSocket(recipeId) {
     if (!recipeId) return;
 
     // Create WebSocket manager instance
-    const wsUrl = import.meta.env.VITE_WS_URL || 'wss://recipe-chat-assistant--fastapi-app.modal.run';
-    const manager = new WebSocketManager(wsUrl);
-    wsManagerRef.current = manager;
+    try {
+      const wsUrl = import.meta.env.VITE_WS_URL || 'wss://recipe-chat-assistant--fastapi-app.modal.run';
+      const manager = new WebSocketManager(wsUrl);
+      wsManagerRef.current = manager;
+    } catch (error) {
+      console.error('Failed to create WebSocket manager:', error);
+      setError('Failed to initialize WebSocket connection');
+      return;
+    }
 
     // Set up event handlers
-    manager.on('state', (newState) => {
+    wsManagerRef.current.on('state', (newState) => {
       setState(newState);
       if (newState === 'error') {
         setError('Connection error. Please try again.');
@@ -28,7 +34,7 @@ export function useWebSocket(recipeId) {
       }
     });
 
-    manager.on('message', (message) => {
+    wsManagerRef.current.on('message', (message) => {
       // Add message to history
       const newMessages = [...messagesRef.current, message];
       messagesRef.current = newMessages;
@@ -46,12 +52,14 @@ export function useWebSocket(recipeId) {
     });
 
     // Connect to WebSocket
-    manager.connect(recipeId);
+    wsManagerRef.current.connect(recipeId);
 
     // Cleanup on unmount or recipe change
     return () => {
-      manager.disconnect();
-      wsManagerRef.current = null;
+      if (wsManagerRef.current) {
+        wsManagerRef.current.disconnect();
+        wsManagerRef.current = null;
+      }
       messagesRef.current = [];
     };
   }, [recipeId]);
@@ -67,7 +75,7 @@ export function useWebSocket(recipeId) {
       type: 'chat_message',
       id: `msg_${Date.now()}`,
       timestamp: new Date().toISOString(),
-      payload: { content }
+      payload: { content: content.trim() }
     };
     
     const newMessages = [...messagesRef.current, userMessage];
@@ -75,7 +83,11 @@ export function useWebSocket(recipeId) {
     setMessages(newMessages);
 
     // Send via WebSocket
-    wsManagerRef.current.sendChatMessage(content);
+    try {
+      wsManagerRef.current.sendChatMessage(content.trim());
+    } catch (error) {
+      setError('Not connected. Please wait...');
+    }
   }, []);
 
   const reconnect = useCallback(() => {

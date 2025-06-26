@@ -229,7 +229,7 @@ describe('useWebSocket', () => {
     });
 
     it('should show error when sending without connection', () => {
-      mockManager.sendChatMessage.mockImplementation(() => {
+      mockManager.sendChatMessage.mockImplementationOnce(() => {
         throw new Error('Not connected');
       });
 
@@ -264,6 +264,12 @@ describe('useWebSocket', () => {
       });
 
       expect(mockManager.sendChatMessage).toHaveBeenCalledWith('Trimmed message');
+      
+      // Also check that it's stored trimmed
+      const userMessage = result.current.messages.find(
+        msg => msg.payload.content === 'Trimmed message'
+      );
+      expect(userMessage).toBeDefined();
     });
   });
 
