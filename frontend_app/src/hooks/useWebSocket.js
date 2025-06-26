@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { WebSocketManager } from '../lib/websocket';
+import { WS_BASE_URL } from '../config/api';
 
 export function useWebSocket(recipeId) {
   const [state, setState] = useState('disconnected');
@@ -15,9 +16,7 @@ export function useWebSocket(recipeId) {
 
     // Create WebSocket manager instance
     try {
-      const wsUrl = import.meta.env.VITE_WS_URL || 
-        (import.meta.env.VITE_ENVIRONMENT === 'development' ? 'ws://localhost:8000' : 'wss://recipe-chat-assistant--fastapi-app.modal.run');
-      const manager = new WebSocketManager(wsUrl);
+      const manager = new WebSocketManager(WS_BASE_URL);
       wsManagerRef.current = manager;
     } catch (error) {
       console.error('Failed to create WebSocket manager:', error);

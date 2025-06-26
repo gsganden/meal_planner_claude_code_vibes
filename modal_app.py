@@ -26,6 +26,7 @@ volume = Volume.from_name("recipe-data-volume", create_if_missing=True)
     memory=512,
     concurrency_limit=100,
     container_idle_timeout=300,
+    allow_concurrent_inputs=100,  # Enable concurrent WebSocket connections
 )
 @asgi_app()
 def fastapi_app():
