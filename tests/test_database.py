@@ -17,8 +17,7 @@ async def test_user_creation(test_db_session: AsyncSession):
     # Create a user
     user = User(
         email="test@example.com",
-        password_hash="hashed_password",
-        name="Test User"
+        password_hash="hashed_password"
     )
     test_db_session.add(user)
     await test_db_session.commit()
@@ -36,8 +35,7 @@ async def test_recipe_creation(test_db_session: AsyncSession):
     # First create a user
     user = User(
         email="chef@example.com",
-        password_hash="hashed_password",
-        name="Chef User"
+        password_hash="hashed_password"
     )
     test_db_session.add(user)
     await test_db_session.commit()

@@ -24,10 +24,7 @@ async def test_full_user_journey(test_client: AsyncClient):
     test_client.headers["Authorization"] = f"Bearer {access_token}"
     
     create_response = await test_client.post("/v1/recipes", json={
-        "title": "",  # Test auto-title
-        "yield": "4 servings",
-        "ingredients": [{"text": "placeholder", "quantity": "1", "unit": ""}],
-        "steps": [{"order": 1, "text": "placeholder"}]
+        "title": "Untitled Recipe 1"  # Only title is required
     })
     assert create_response.status_code == 201
     
@@ -201,12 +198,11 @@ async def test_error_scenarios(test_client: AsyncClient):
     })
     token = signup_response.json()["access_token"]
     
-    # Test invalid recipe data
+    # Test invalid recipe data - title with wrong type
     response = await test_client.post("/v1/recipes", 
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "title": "Invalid Recipe"
-            # Missing required fields
+            "title": 123  # Invalid type - should be string
         })
     assert response.status_code == 422
     

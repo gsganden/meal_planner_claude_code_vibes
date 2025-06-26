@@ -139,7 +139,7 @@ def test_sanitize_filename():
 
 def test_recipe_completeness_validation():
     """Test recipe completeness validation"""
-    # Complete recipe
+    # Complete recipe with all optional fields
     complete_recipe = {
         "title": "Test Recipe",
         "yield": "4 servings",
@@ -152,23 +152,26 @@ def test_recipe_completeness_validation():
     }
     assert validate_recipe_completeness(complete_recipe) == []
     
+    # Minimal valid recipe - only title required
+    minimal_recipe = {"title": "Simple Recipe"}
+    assert validate_recipe_completeness(minimal_recipe) == []
+    
     # Missing title
     recipe = complete_recipe.copy()
     recipe["title"] = ""
     issues = validate_recipe_completeness(recipe)
     assert any("title" in issue for issue in issues)
     
-    # Missing yield
+    # Invalid yield (empty string when provided)
     recipe = complete_recipe.copy()
     recipe["yield"] = ""
     issues = validate_recipe_completeness(recipe)
-    assert any("yield" in issue for issue in issues)
+    assert any("Yield" in issue for issue in issues)
     
-    # No ingredients
-    recipe = complete_recipe.copy()
-    recipe["ingredients"] = []
+    # Invalid ingredients (not a list)
+    recipe = {"title": "Test", "ingredients": "not a list"}
     issues = validate_recipe_completeness(recipe)
-    assert any("ingredient" in issue for issue in issues)
+    assert any("Ingredients must be a list" in issue for issue in issues)
     
     # Invalid ingredient
     recipe = complete_recipe.copy()
@@ -176,14 +179,18 @@ def test_recipe_completeness_validation():
     issues = validate_recipe_completeness(recipe)
     assert any("Ingredient 1" in issue for issue in issues)
     
-    # No steps
-    recipe = complete_recipe.copy()
-    recipe["steps"] = []
+    # Invalid steps (not a list)
+    recipe = {"title": "Test", "steps": "not a list"}
     issues = validate_recipe_completeness(recipe)
-    assert any("step" in issue for issue in issues)
+    assert any("Steps must be a list" in issue for issue in issues)
     
     # Invalid step order
     recipe = complete_recipe.copy()
     recipe["steps"] = [{"order": 0, "text": "Invalid order"}]
     issues = validate_recipe_completeness(recipe)
     assert any("order" in issue for issue in issues)
+    
+    # Empty ingredients and steps arrays should be valid
+    recipe = {"title": "Minimal Recipe", "ingredients": [], "steps": []}
+    issues = validate_recipe_completeness(recipe)
+    assert issues == []  # No validation errors

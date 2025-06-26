@@ -66,7 +66,7 @@ Important rules:
         recipe_data = json.loads(json_text)
         
         # Validate against schema
-        RecipeSchema(**recipe_data, visibility="private")
+        RecipeSchema(**recipe_data)
         
         return recipe_data
         
@@ -128,7 +128,7 @@ Important rules:
         recipe_data = json.loads(json_text)
         
         # Validate against schema
-        RecipeSchema(**recipe_data, visibility="private")
+        RecipeSchema(**recipe_data)
         
         return recipe_data
         
@@ -182,7 +182,7 @@ Return the modified recipe as JSON."""
             recipe_data["created_at"] = current_recipe["created_at"]
         
         # Validate against schema
-        RecipeSchema(**recipe_data, visibility="private")
+        RecipeSchema(**recipe_data)
         
         return recipe_data
         

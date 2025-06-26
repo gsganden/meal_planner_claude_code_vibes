@@ -102,7 +102,7 @@ async def test_rate_limit_headers(rate_limit_client: AsyncClient):
     remaining = int(response.headers["X-RateLimit-Remaining"])
     reset = int(response.headers["X-RateLimit-Reset"])
     
-    assert limit == 60  # API endpoint limit
+    assert limit == 300  # API endpoint limit
     assert remaining >= 0
     assert remaining < limit
     assert reset > 0

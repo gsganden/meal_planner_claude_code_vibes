@@ -163,35 +163,39 @@ def validate_recipe_completeness(recipe_data: Dict[str, Any]) -> List[str]:
     """
     issues = []
     
-    # Check required fields
+    # Check required fields - only title is required per spec
     if not recipe_data.get("title") or not recipe_data["title"].strip():
         issues.append("Recipe must have a title")
     
-    if not recipe_data.get("yield") or not recipe_data["yield"].strip():
-        issues.append("Recipe must specify yield/servings")
+    # Optional field validation - only validate if present
+    if "yield" in recipe_data and recipe_data["yield"] is not None:
+        if not isinstance(recipe_data["yield"], str) or not recipe_data["yield"].strip():
+            issues.append("Yield must be a non-empty string if provided")
     
-    # Check ingredients
-    ingredients = recipe_data.get("ingredients", [])
-    if not ingredients:
-        issues.append("Recipe must have at least one ingredient")
-    else:
-        for i, ingredient in enumerate(ingredients):
-            if not isinstance(ingredient, dict):
-                issues.append(f"Ingredient {i+1} is invalid")
-            elif not ingredient.get("text") or not ingredient["text"].strip():
-                issues.append(f"Ingredient {i+1} must have text")
+    # Check ingredients if present
+    if "ingredients" in recipe_data and recipe_data["ingredients"] is not None:
+        ingredients = recipe_data["ingredients"]
+        if not isinstance(ingredients, list):
+            issues.append("Ingredients must be a list")
+        else:
+            for i, ingredient in enumerate(ingredients):
+                if not isinstance(ingredient, dict):
+                    issues.append(f"Ingredient {i+1} is invalid")
+                elif not ingredient.get("text") or not ingredient["text"].strip():
+                    issues.append(f"Ingredient {i+1} must have text")
     
-    # Check steps
-    steps = recipe_data.get("steps", [])
-    if not steps:
-        issues.append("Recipe must have at least one step")
-    else:
-        for i, step in enumerate(steps):
-            if not isinstance(step, dict):
-                issues.append(f"Step {i+1} is invalid")
-            elif not step.get("text") or not step["text"].strip():
-                issues.append(f"Step {i+1} must have text")
-            elif not isinstance(step.get("order"), int) or step["order"] < 1:
-                issues.append(f"Step {i+1} must have valid order number")
+    # Check steps if present
+    if "steps" in recipe_data and recipe_data["steps"] is not None:
+        steps = recipe_data["steps"]
+        if not isinstance(steps, list):
+            issues.append("Steps must be a list")
+        else:
+            for i, step in enumerate(steps):
+                if not isinstance(step, dict):
+                    issues.append(f"Step {i+1} is invalid")
+                elif not step.get("text") or not step["text"].strip():
+                    issues.append(f"Step {i+1} must have text")
+                elif "order" in step and (not isinstance(step["order"], int) or step["order"] < 1):
+                    issues.append(f"Step {i+1} must have valid order number if order is provided")
     
     return issues

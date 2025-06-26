@@ -79,9 +79,11 @@ async def test_extract_recipe_invalid_json(mock_llm_response):
 @pytest.mark.asyncio
 async def test_extract_recipe_incomplete(mock_llm_response):
     """Test handling of incomplete recipe data"""
+    # Recipe with invalid data type for ingredients
     incomplete_recipe = {
-        "title": "Incomplete Recipe",
-        # Missing required fields
+        "title": "Test Recipe",
+        "yield": "2 servings",
+        "ingredients": "not a list"  # Should be a list
     }
     
     with patch('src.llm.recipe_processor.generate_completion', 

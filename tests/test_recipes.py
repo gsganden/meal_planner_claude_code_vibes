@@ -32,19 +32,28 @@ async def test_create_recipe_minimal(authenticated_client: AsyncClient):
 async def test_create_recipe_auto_title(authenticated_client: AsyncClient):
     """Test creating a recipe with auto-generated title"""
     response = await authenticated_client.post("/v1/recipes", json={
-        "title": "",
-        "yield": "1 serving",
-        "ingredients": [
-            {"text": "1 apple", "quantity": "1", "unit": ""}
-        ],
-        "steps": [
-            {"order": 1, "text": "Eat the apple"}
-        ]
+        "title": ""  # Empty title should trigger auto-generation
     })
     
     assert response.status_code == 201
     data = response.json()
     assert data["title"] == "Untitled Recipe 1"
+
+
+@pytest.mark.asyncio
+async def test_create_recipe_empty_arrays(authenticated_client: AsyncClient):
+    """Test creating a recipe with empty ingredients and steps arrays"""
+    response = await authenticated_client.post("/v1/recipes", json={
+        "title": "Recipe with Empty Arrays",
+        "ingredients": [],
+        "steps": []
+    })
+    
+    assert response.status_code == 201
+    data = response.json()
+    assert data["title"] == "Recipe with Empty Arrays"
+    assert data["ingredients"] == []
+    assert data["steps"] == []
 
 
 @pytest.mark.asyncio
