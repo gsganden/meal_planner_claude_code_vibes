@@ -15,7 +15,8 @@ export function useWebSocket(recipeId) {
 
     // Create WebSocket manager instance
     try {
-      const wsUrl = import.meta.env.VITE_WS_URL || 'wss://recipe-chat-assistant--fastapi-app.modal.run';
+      const wsUrl = import.meta.env.VITE_WS_URL || 
+        (import.meta.env.VITE_ENVIRONMENT === 'development' ? 'ws://localhost:8000' : 'wss://recipe-chat-assistant--fastapi-app.modal.run');
       const manager = new WebSocketManager(wsUrl);
       wsManagerRef.current = manager;
     } catch (error) {

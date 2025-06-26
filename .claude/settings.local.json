@@ -24,7 +24,10 @@
       "Bash(npm test:*)",
       "Bash(npx tailwindcss init:*)",
       "Bash(npm install:*)",
-      "Bash(./restart_servers.sh:*)"
+      "Bash(./restart_servers.sh:*)",
+      "Bash(git add:*)",
+      "Bash(./venv/bin/python:*)",
+      "Bash(npm run lint)"
     ],
     "deny": []
   }

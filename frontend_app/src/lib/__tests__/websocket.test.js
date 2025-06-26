@@ -16,6 +16,10 @@ class MockWebSocket {
     this.onclose = null;
     this.onmessage = null;
     this.onerror = null;
+    this.sentMessages = [];
+    
+    // Store instance for access in tests
+    MockWebSocket.lastInstance = this;
     
     // Simulate connection after a tick
     setTimeout(() => {
@@ -25,7 +29,6 @@ class MockWebSocket {
   }
 
   send(data) {
-    this.sentMessages = this.sentMessages || [];
     this.sentMessages.push(data);
   }
 
@@ -114,9 +117,11 @@ describe('WebSocketManager', () => {
       manager.on('state', stateHandler);
 
       manager.connect('recipe-123');
-      await vi.runAllTimersAsync();
-
-      // Simulate auth success message
+      
+      // Wait for WebSocket to open
+      await vi.advanceTimersByTimeAsync(10);
+      
+      // Simulate auth success message before timeout
       manager.ws.onmessage({
         data: JSON.stringify({
           type: 'recipe_update',
@@ -131,10 +136,14 @@ describe('WebSocketManager', () => {
 
     it('should reconnect with exponential backoff', async () => {
       manager.connect('recipe-123');
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
 
+      // Get the WebSocket instance
+      const ws = MockWebSocket.lastInstance;
+      expect(ws).toBeDefined();
+      
       // Simulate unexpected close
-      manager.ws.onclose({ code: 1006, reason: 'Abnormal closure' });
+      ws.onclose({ code: 1006, reason: 'Abnormal closure' });
 
       // Should schedule reconnect
       expect(manager.reconnectTimeout).toBeDefined();
@@ -143,12 +152,12 @@ describe('WebSocketManager', () => {
       vi.advanceTimersByTime(1000);
       
       // Should create new connection
-      expect(manager.getState()).toBe('reconnecting');
+      expect(manager.getState()).toBe('connecting');
     });
 
     it('should not reconnect on normal close', async () => {
       manager.connect('recipe-123');
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
 
       // Normal disconnect
       manager.disconnect();
@@ -161,10 +170,14 @@ describe('WebSocketManager', () => {
   describe('Message Handling', () => {
     beforeEach(async () => {
       manager.connect('recipe-123');
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
+      
+      // Get the WebSocket instance
+      const ws = MockWebSocket.lastInstance;
+      expect(ws).toBeDefined();
       
       // Simulate successful auth
-      manager.ws.onmessage({
+      ws.onmessage({
         data: JSON.stringify({
           type: 'recipe_update',
           id: 'auth_response',
@@ -189,13 +202,18 @@ describe('WebSocketManager', () => {
       const newManager = new WebSocketManager('ws://test.com');
       newManager.connect('recipe-123');
       
-      // Send message before auth completes
+      // Wait for WebSocket to open
+      await vi.advanceTimersByTimeAsync(10);
+      
+      // Send message during authentication (before auth completes)
       newManager.sendChatMessage('Queued message');
       
-      await vi.runAllTimersAsync();
+      // Get the WebSocket instance
+      const ws = MockWebSocket.lastInstance;
+      expect(ws).toBeDefined();
 
       // Simulate auth success
-      newManager.ws.onmessage({
+      ws.onmessage({
         data: JSON.stringify({
           type: 'recipe_update',
           id: 'auth_response',
@@ -204,9 +222,9 @@ describe('WebSocketManager', () => {
         })
       });
 
-      // Should send queued message
-      expect(newManager.ws.sentMessages).toHaveLength(2);
-      const queuedMsg = JSON.parse(newManager.ws.sentMessages[1]);
+      // Should send queued message (auth message + queued message)
+      expect(ws.sentMessages).toHaveLength(2);
+      const queuedMsg = JSON.parse(ws.sentMessages[1]);
       expect(queuedMsg.payload.content).toBe('Queued message');
       
       newManager.disconnect();
@@ -254,21 +272,29 @@ describe('WebSocketManager', () => {
       manager.on('state', stateHandler);
 
       manager.connect('recipe-123');
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
 
+      // Get the WebSocket instance
+      const ws = MockWebSocket.lastInstance;
+      expect(ws).toBeDefined();
+      
       // Simulate error
-      manager.ws.onerror(new Error('Connection failed'));
+      ws.onerror(new Error('Connection failed'));
 
       expect(stateHandler).toHaveBeenCalledWith('error');
     });
 
     it('should handle invalid JSON messages', async () => {
       manager.connect('recipe-123');
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
 
+      // Get the WebSocket instance
+      const ws = MockWebSocket.lastInstance;
+      expect(ws).toBeDefined();
+      
       // Should not throw
       expect(() => {
-        manager.ws.onmessage({ data: 'invalid json' });
+        ws.onmessage({ data: 'invalid json' });
       }).not.toThrow();
     });
 
@@ -294,11 +320,15 @@ describe('WebSocketManager', () => {
       manager.connect('recipe-123');
       expect(manager.getState()).toBe('connecting');
       
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
       expect(manager.getState()).toBe('authenticating');
       
+      // Get the WebSocket instance
+      const ws = MockWebSocket.lastInstance;
+      expect(ws).toBeDefined();
+      
       // Simulate auth success
-      manager.ws.onmessage({
+      ws.onmessage({
         data: JSON.stringify({
           type: 'recipe_update',
           id: 'auth_response',
@@ -313,7 +343,7 @@ describe('WebSocketManager', () => {
 
     it('should prevent duplicate connections', async () => {
       manager.connect('recipe-123');
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(10);
 
       const firstWs = manager.ws;
       

@@ -1,3 +1,5 @@
+import { refreshAccessToken } from './auth';
+
 export class WebSocketManager {
   constructor(wsUrl) {
     this.wsUrl = wsUrl;
