@@ -2,9 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuthStore } from '../stores/authStore'
-import { getRecipeWebSocketUrl } from '../config/api'
+import { useWebSocket } from '../hooks/useWebSocket.js'
 import RecipeForm from '../components/RecipeForm'
-import ChatPanel from '../components/ChatPanel'
+import { ConnectionStatus } from '../components/ConnectionStatus'
 
 export default function RecipeEditorPage() {
   const { id } = useParams()
@@ -17,10 +17,10 @@ export default function RecipeEditorPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [lastSaveTime, setLastSaveTime] = useState(null)
   const saveTimeoutRef = useRef(null)
-  const wsRef = useRef(null)
-  const [wsStatus, setWsStatus] = useState('disconnected')
-  const [chatMessages, setChatMessages] = useState([])
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  
+  // Use the new WebSocket hook
+  const { state: wsState, messages, sendMessage, lastRecipeUpdate, error: wsError } = useWebSocket(id)
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -36,19 +36,14 @@ export default function RecipeEditorPage() {
     }
   }, [id])
 
-  // WebSocket connection
+  // Handle recipe updates from WebSocket
   useEffect(() => {
-    if (recipe && id && !wsRef.current) {
-      connectWebSocket()
+    if (lastRecipeUpdate?.payload.recipe_data) {
+      setRecipe(lastRecipeUpdate.payload.recipe_data)
+      setHasUnsavedChanges(false)
+      setLastSaveTime(new Date())
     }
-    
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close()
-        wsRef.current = null
-      }
-    }
-  }, [id, recipe?.id]) // Connect when we have a recipe ID
+  }, [lastRecipeUpdate])
 
   // Warn about unsaved changes
   useEffect(() => {
@@ -80,97 +75,30 @@ export default function RecipeEditorPage() {
     }
   }
 
-  const connectWebSocket = () => {
-    const token = localStorage.getItem('access_token')
-    const wsUrl = getRecipeWebSocketUrl(id, token)
-    
-    try {
-      wsRef.current = new WebSocket(wsUrl)
-      
-      wsRef.current.onopen = () => {
-        console.log('WebSocket connected to:', wsUrl)
-        setWsStatus('connected')
-      }
-      
-      wsRef.current.onmessage = (event) => {
-        console.log('WebSocket message received:', event.data)
-        const data = JSON.parse(event.data)
-        if (data.type === 'recipe_update') {
-          const { content, recipe_data, error } = data.payload
-          console.log('Recipe update payload:', { content, recipe_data, error })
-          
-          // Handle errors
-          if (error) {
-            setChatMessages(prev => [...prev, {
-              type: 'error',
-              content: error,
-              timestamp: new Date().toISOString()
-            }])
-            return
-          }
-          
-          // Add assistant message to chat if provided
-          if (content) {
-            setChatMessages(prev => [...prev, {
-              type: 'assistant',
-              content: content,
-              timestamp: new Date().toISOString()
-            }])
-          }
-          
-          // Update recipe if data provided
-          if (recipe_data) {
-            setRecipe(recipe_data)
-            setHasUnsavedChanges(false)
-            setLastSaveTime(new Date())
-          }
+  // Convert WebSocket messages to chat format
+  const getChatMessages = () => {
+    return messages.map(msg => {
+      if (msg.type === 'chat_message') {
+        return {
+          type: 'user',
+          content: msg.payload.content,
+          timestamp: msg.timestamp
+        }
+      } else if (msg.type === 'recipe_update') {
+        return {
+          type: 'assistant',
+          content: msg.payload.content,
+          timestamp: msg.timestamp
+        }
+      } else if (msg.type === 'error') {
+        return {
+          type: 'error',
+          content: msg.payload.message,
+          timestamp: msg.timestamp
         }
       }
-      
-      wsRef.current.onerror = (error) => {
-        console.error('WebSocket error:', error)
-        setWsStatus('error')
-      }
-      
-      wsRef.current.onclose = (event) => {
-        console.log('WebSocket disconnected', event.code, event.reason)
-        setWsStatus('disconnected')
-        wsRef.current = null
-        
-        // Only attempt to reconnect if it wasn't a normal closure
-        if (event.code !== 1000 && recipe) {
-          setTimeout(() => {
-            if (!wsRef.current) {
-              connectWebSocket()
-            }
-          }, 3000)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to connect WebSocket:', error)
-      setWsStatus('error')
-    }
-  }
-
-  const sendChatMessage = (message) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      // Add user message to chat
-      setChatMessages(prev => [...prev, {
-        type: 'user',
-        content: message,
-        timestamp: new Date().toISOString()
-      }])
-      
-      // Send to server
-      const messageData = {
-        type: 'chat_message',
-        payload: {
-          content: message
-        }
-      }
-      console.log('Sending WebSocket message:', messageData)
-      wsRef.current.send(JSON.stringify(messageData))
-    }
+      return null
+    }).filter(Boolean)
   }
 
   const handleRecipeChange = useCallback((field, value) => {
@@ -310,12 +238,96 @@ export default function RecipeEditorPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left pane - Chat (40%) */}
         <div className="w-2/5 border-r border-gray-200 flex flex-col bg-white">
-          <ChatPanel
-            messages={chatMessages}
-            onSendMessage={sendChatMessage}
-            connectionStatus={wsStatus}
-            recipeName={recipe?.title || 'Untitled Recipe'}
-          />
+          <div className="flex flex-col h-full">
+            {/* Connection status */}
+            <div className="border-b border-gray-200 px-4 py-2 text-sm flex items-center justify-between">
+              <span>Recipe Assistant</span>
+              <ConnectionStatus state={wsState} />
+            </div>
+
+            {/* Chat header */}
+            <div className="px-4 py-3 border-b border-gray-200">
+              <h2 className="text-lg font-medium text-gray-900">Chat</h2>
+              <p className="text-sm text-gray-500">Chat to edit "{recipe?.title || 'Untitled Recipe'}"</p>
+            </div>
+
+            {/* Chat messages using RecipeChat component style */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+              {wsError && (
+                <div className="text-center text-red-500">
+                  {wsError}
+                </div>
+              )}
+              
+              {getChatMessages().length === 0 && (
+                <div className="text-center text-gray-500 mt-8">
+                  <p className="text-sm">How can I help you with this recipe?</p>
+                  <p className="text-xs mt-2">Try pasting a recipe, asking for modifications, or requesting suggestions.</p>
+                </div>
+              )}
+              
+              {getChatMessages().map((message, index) => (
+                <div
+                  key={index}
+                  className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                      message.type === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : message.type === 'error'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-gray-100 text-gray-900'
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <p className={`text-xs mt-1 ${
+                      message.type === 'user' ? 'text-blue-200' : 'text-gray-500'
+                    }`}>
+                      {new Date(message.timestamp).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Input form */}
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              const input = e.target.message.value.trim()
+              if (input && wsState === 'authenticated') {
+                sendMessage(input)
+                e.target.message.value = ''
+              }
+            }} className="px-4 py-4 border-t border-gray-200">
+              <div className="flex space-x-2">
+                <input
+                  name="message"
+                  type="text"
+                  placeholder={
+                    wsState === 'authenticated'
+                      ? 'Paste a recipe or type a message...'
+                      : wsState === 'connecting' || wsState === 'authenticating'
+                      ? 'Connecting...'
+                      : 'Not connected'
+                  }
+                  disabled={wsState !== 'authenticated'}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                />
+                <button
+                  type="submit"
+                  disabled={wsState !== 'authenticated'}
+                  className={`px-4 py-2 rounded-md font-medium ${
+                    wsState === 'authenticated'
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  Send
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
 
         {/* Right pane - Recipe form (60%) */}
