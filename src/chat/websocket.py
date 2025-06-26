@@ -23,6 +23,19 @@ from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
+# Metrics tracking
+websocket_metrics = {
+    "total_connections": 0,
+    "active_connections": 0,
+    "auth_success": 0,
+    "auth_failures": 0,
+    "auth_timeouts": 0,
+    "messages_received": 0,
+    "messages_sent": 0,
+    "reauth_attempts": 0,
+    "reauth_success": 0,
+}
+
 
 class ConnectionManager:
     """Manages WebSocket connections"""
