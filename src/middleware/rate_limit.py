@@ -103,7 +103,7 @@ auth_limiter = RateLimiter(requests_per_minute=10)  # Auth endpoints (general)
 api_limiter = RateLimiter(requests_per_minute=300)  # Global API limit per IP
 websocket_limiter = RateLimiter(requests_per_minute=30)  # WebSocket messages
 recipe_creation_limiter = RateLimiter(requests_per_minute=20)  # Recipe creation per user
-password_reset_limiter = RateLimiter(requests_per_minute=5)  # Password reset emails (5/hour = ~5/60min)
+password_reset_limiter = RateLimiter(requests_per_minute=1)  # Password reset emails (spec: 5/hour, using 1/min as approximation)
 
 
 async def rate_limit_middleware(request: Request, call_next):
