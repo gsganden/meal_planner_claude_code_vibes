@@ -48,11 +48,19 @@ export const useAuthStore = create((set) => ({
   error: null,
 
   // Initialize auth state from localStorage
-  initialize: () => {
+  initialize: async () => {
     const token = localStorage.getItem('access_token')
     if (token) {
-      // TODO: Validate token with API
-      set({ isAuthenticated: true, isLoading: false })
+      // Validate token with API
+      try {
+        const response = await axios.get('/auth/me')
+        set({ isAuthenticated: true, isLoading: false, user: response.data })
+      } catch (error) {
+        // Token is invalid, clear it
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        set({ isAuthenticated: false, isLoading: false })
+      }
     } else {
       set({ isAuthenticated: false, isLoading: false })
     }
