@@ -12,6 +12,7 @@ from src.auth.security import (
     verify_password, get_password_hash, create_access_token,
     create_refresh_token, create_password_reset_token, is_token_expired
 )
+from src.auth.dependencies import get_current_user
 from datetime import timedelta
 import logging
 
@@ -225,3 +226,13 @@ async def reset_password(request: ResetPasswordRequest, db: AsyncSession = Depen
     await db.commit()
     
     return {"message": "Password updated successfully"}
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Get current user information"""
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        created_at=current_user.created_at
+    )
