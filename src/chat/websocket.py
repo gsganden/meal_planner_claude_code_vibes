@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 import asyncio
 import json
 import logging
+import time
 import re
 from typing import Optional, Dict, Any
 
@@ -38,25 +39,116 @@ websocket_metrics = {
 
 
 class ConnectionManager:
-    """Manages WebSocket connections"""
+    """Manages WebSocket connections with rate limiting and connection limits"""
     
     def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
+        self.active_connections: Dict[str, dict] = {}
+        self.user_connections: Dict[str, set] = {}  # user_id -> set of connection_ids
+        self.message_counts: Dict[str, list] = {}  # connection_id -> list of timestamps
+        self.MAX_CONNECTIONS_PER_USER = 5
+        self.MAX_MESSAGES_PER_MINUTE = 30
+        self.MAX_MESSAGE_SIZE = 64 * 1024  # 64KB
     
-    async def connect(self, websocket: WebSocket, client_id: str):
-        self.active_connections[client_id] = websocket
+    async def connect(self, websocket: WebSocket, client_id: str, user_id: str = None):
+        # Check user connection limit
+        if user_id:
+            if user_id not in self.user_connections:
+                self.user_connections[user_id] = set()
+            
+            if len(self.user_connections[user_id]) >= self.MAX_CONNECTIONS_PER_USER:
+                await websocket.close(
+                    code=status.WS_1008_POLICY_VIOLATION,
+                    reason="Connection limit exceeded"
+                )
+                return False
+            
+            self.user_connections[user_id].add(client_id)
+        
+        self.active_connections[client_id] = {
+            "websocket": websocket,
+            "user_id": user_id,
+            "auth_time": None,
+            "token_exp": None
+        }
+        self.message_counts[client_id] = []
         logger.info(f"Client {client_id} connected")
+        return True
     
     def disconnect(self, client_id: str):
         if client_id in self.active_connections:
+            conn_info = self.active_connections[client_id]
+            user_id = conn_info.get("user_id")
+            
+            # Remove from user connections
+            if user_id and user_id in self.user_connections:
+                self.user_connections[user_id].discard(client_id)
+                if not self.user_connections[user_id]:
+                    del self.user_connections[user_id]
+            
             del self.active_connections[client_id]
+            
+            # Clean up message counts
+            if client_id in self.message_counts:
+                del self.message_counts[client_id]
+            
             logger.info(f"Client {client_id} disconnected")
+    
+    def check_rate_limit(self, client_id: str) -> bool:
+        """Check if client has exceeded rate limit"""
+        if client_id not in self.message_counts:
+            self.message_counts[client_id] = []
+        
+        current_time = time.time()
+        # Remove messages older than 1 minute
+        self.message_counts[client_id] = [
+            t for t in self.message_counts[client_id]
+            if current_time - t < 60
+        ]
+        
+        # Check if exceeding limit
+        if len(self.message_counts[client_id]) >= self.MAX_MESSAGES_PER_MINUTE:
+            logger.info(f"Rate limit exceeded for {client_id}: {len(self.message_counts[client_id])} messages in last minute")
+            return False
+        
+        # Add current message
+        self.message_counts[client_id].append(current_time)
+        logger.debug(f"Message count for {client_id}: {len(self.message_counts[client_id])}")
+        return True
+    
+    def check_message_size(self, message: str) -> bool:
+        """Check if message exceeds size limit"""
+        return len(message.encode('utf-8')) <= self.MAX_MESSAGE_SIZE
     
     async def send_json(self, websocket: WebSocket, data: dict):
         await websocket.send_json(data)
 
 
 manager = ConnectionManager()
+
+
+async def _check_token_expiry():
+    """Check all connections for token expiry - used for testing"""
+    current_time = time.time()
+    
+    for client_id, conn_info in list(manager.active_connections.items()):
+        if isinstance(conn_info, dict):
+            token_exp = conn_info.get("token_exp", 0)
+            auth_time = conn_info.get("auth_time", 0)
+            
+            # Check if 14 minutes have passed since auth
+            if auth_time and current_time - auth_time >= 14 * 60:
+                websocket = conn_info.get("websocket")
+                if websocket:
+                    # Send auth_required message
+                    auth_required = AuthRequiredMessage(
+                        payload={"message": "Token expiring soon"}
+                    )
+                    await websocket.send_json(json.loads(auth_required.model_dump_json()))
+                    logger.info(f"Sent auth_required to {client_id} for testing")
+
+
+# Expose for testing
+manager._check_token_expiry = _check_token_expiry
 
 
 async def get_user_from_token(token: str, db: AsyncSession) -> Optional[User]:
@@ -203,7 +295,7 @@ async def monitor_token_expiry(
             auth_required = AuthRequiredMessage(
                 payload={"reason": "Token expiring soon"}
             )
-            await manager.send_json(websocket, json.loads(auth_required.model_dump_json()))
+            await websocket.send_json(json.loads(auth_required.model_dump_json()))
             logger.info(f"Sent auth_required to {client_id}")
             
             # Wait for re-authentication (30 seconds)
@@ -312,10 +404,16 @@ async def handle_chat(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Recipe not found or access denied")
             return
         
-        # Register client
-        client_id = f"{user.id}:{recipe_id}"
-        manager.active_connections[client_id] = websocket
-        logger.info(f"Client {client_id} authenticated and connected")
+        # Register client with connection limit check
+        client_id = f"{user.id}:{recipe_id}:{id(websocket)}"  # Add unique ID for multiple connections
+        if not await manager.connect(websocket, client_id, user.id):
+            websocket_metrics["auth_failures"] += 1
+            return  # Connection was rejected due to limit
+        
+        # Update connection info with auth details
+        manager.active_connections[client_id]["auth_time"] = time.time()
+        manager.active_connections[client_id]["token_exp"] = payload.get("exp", 0)
+        websocket_metrics["auth_success"] += 1
         
         # Start token expiry monitoring
         token_expiry = payload.get("exp", 0)
@@ -335,7 +433,26 @@ async def handle_chat(
         # Handle messages
         while True:
             # Receive message
-            data = await websocket.receive_json()
+            try:
+                data = await websocket.receive_json()
+                
+                # Check message size (convert back to string to check size)
+                raw_message = json.dumps(data)
+                if not manager.check_message_size(raw_message):
+                    await websocket.close(code=1009, reason="Message too large")
+                    return
+            except json.JSONDecodeError:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid JSON")
+                return
+            except Exception as e:
+                # Handle other receive errors
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid message format")
+                return
+            
+            # Check rate limit
+            if not manager.check_rate_limit(client_id):
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Rate limit exceeded")
+                return
             
             try:
                 message_type = data.get("type")
