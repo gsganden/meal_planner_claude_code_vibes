@@ -2,26 +2,29 @@
 Deploy React frontend to Modal as static files
 """
 import modal
+from modal import App, Image
 import os
 import mimetypes
 
-app = modal.App("recipe-chat-frontend")
+# Create Modal app
+app = App("recipe-chat-frontend")
 
-# Mount the built frontend files
-frontend_mount = modal.Mount.from_local_dir(
-    "frontend_app/dist",
-    remote_path="/dist",
+# Define the container image with the frontend files
+image = (
+    Image.debian_slim(python_version="3.11")
+    .pip_install("fastapi[standard]")
+    .add_local_dir("frontend_app/dist", "/dist")
 )
 
 
 @app.function(
-    mounts=[frontend_mount],
+    image=image,
     cpu=0.25,
     memory=256,
-    container_idle_timeout=300,
-    concurrency_limit=100,
+    scaledown_window=300,
+    max_containers=100,
 )
-@modal.web_endpoint(method="GET", label="recipe-chat-frontend")
+@modal.fastapi_endpoint(method="GET", label="recipe-chat-frontend")
 def serve(path: str = ""):
     """Serve static files with client-side routing support"""
     

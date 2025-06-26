@@ -27,7 +27,8 @@
       "Bash(./restart_servers.sh:*)",
       "Bash(git add:*)",
       "Bash(./venv/bin/python:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(venv/bin/python -m pytest tests/test_websocket_timing.py::test_websocket_rate_limit_30_messages_per_minute -xvs)"
     ],
     "deny": []
   }
